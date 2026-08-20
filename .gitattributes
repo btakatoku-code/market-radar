@@ -1,0 +1,5 @@
+# 毎回作り直される生成物。取り込み時の競合を避けるため、常にローカル側を採用する。
+# 内容は次回の自動実行で上書きされるため、どちらを選んでも結果は変わらない。
+public/data/latest.json      merge=ours
+public/data/directory.json   merge=ours
+public/data/accuracy_by_asset.json merge=ours
