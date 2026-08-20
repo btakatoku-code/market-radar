@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Market Radar</title>
+<meta name="description" content="世界の市場データを毎日分析して配信する個人用アプリ">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Market Radar">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css?v=18">
+</head>
+<body>
+
+<header class="top">
+  <div class="top-row">
+    <h1>Market&nbsp;Radar</h1>
+    <button id="refresh" class="icon-btn" aria-label="更新">↻</button>
+  </div>
+  <p id="updated" class="updated">読み込み中…</p>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-view="home"  role="tab">今日</button>
+  <button class="tab"        data-view="top5"  role="tab">TOP5</button>
+  <button class="tab"        data-view="rank"  role="tab">ランキング</button>
+  <button class="tab"        data-view="hold"  role="tab">保有</button>
+  <button class="tab"        data-view="fx"    role="tab">FX</button>
+  <button class="tab"        data-view="acc"   role="tab">的中率</button>
+</nav>
+
+<main id="main">
+  <div class="loading"><div class="spinner"></div><p>データを読み込んでいます…</p></div>
+</main>
+
+<footer class="foot">
+  <p>本アプリは市場データの分析結果を表示するものであり、投資助言ではありません。
+     売買の判断と結果はご自身の責任になります。</p>
+  <p class="src">データ: Yahoo Finance / Binance / alternative.me</p>
+</footer>
+
+<script src="app.js?v=18"></script>
+</body>
+</html>

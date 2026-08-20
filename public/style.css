@@ -1,0 +1,262 @@
+:root{
+  --bg:#0b1020; --bg2:#11182f; --card:#151d36; --card2:#1b2544;
+  --line:#26304f; --tx:#e8edf9; --tx2:#95a2c4; --tx3:#6a789c;
+  --up:#25d0a0; --down:#ff6b7a; --warn:#ffb648; --accent:#5b8cff;
+  --safe:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--tx);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  font-size:15px; line-height:1.6; padding-bottom:calc(24px + var(--safe));
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---- ヘッダー ---- */
+.top{
+  position:sticky; top:0; z-index:20; background:rgba(11,16,32,.92);
+  backdrop-filter:saturate(160%) blur(12px);
+  padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 8px;
+  border-bottom:1px solid var(--line);
+}
+.top-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.top h1{font-size:17px;margin:0;letter-spacing:.06em;font-weight:700}
+.updated{margin:2px 0 0;font-size:12px;color:var(--tx3)}
+.icon-btn{
+  background:var(--card2); color:var(--tx); border:1px solid var(--line);
+  width:34px;height:34px;border-radius:10px;font-size:16px;cursor:pointer;
+}
+.icon-btn:active{transform:scale(.94)}
+.icon-btn.spin{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---- タブ ---- */
+.tabs{
+  position:sticky; top:calc(env(safe-area-inset-top,0px) + 58px); z-index:19;
+  display:flex; gap:6px; padding:10px 12px; overflow-x:auto;
+  background:rgba(11,16,32,.92); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line); scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  flex:0 0 auto; padding:8px 15px; border-radius:999px; cursor:pointer;
+  background:var(--card); color:var(--tx2); border:1px solid var(--line);
+  font-size:13.5px; font-weight:600; white-space:nowrap;
+}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+main{padding:14px 12px 8px;max-width:720px;margin:0 auto}
+
+/* ---- 共通パーツ ---- */
+.card{
+  background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:14px; margin-bottom:12px;
+}
+.card h2{font-size:14px;margin:0 0 10px;color:var(--tx2);font-weight:700;letter-spacing:.04em}
+.card h3{font-size:15px;margin:0 0 6px;font-weight:700}
+.muted{color:var(--tx3);font-size:12.5px}
+.up{color:var(--up)} .down{color:var(--down)} .warn{color:var(--warn)}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.pill{
+  display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;
+  background:var(--card2);color:var(--tx2);border:1px solid var(--line);
+  font-weight:600;
+}
+.pill.ok{background:rgba(37,208,160,.14);color:var(--up);border-color:rgba(37,208,160,.3)}
+.pill.no{background:rgba(255,107,122,.14);color:var(--down);border-color:rgba(255,107,122,.3)}
+.pill.wa{background:rgba(255,182,72,.14);color:var(--warn);border-color:rgba(255,182,72,.3)}
+.big{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+
+.banner{
+  border-radius:14px;padding:13px 14px;margin-bottom:12px;font-size:13px;
+  border:1px solid rgba(255,182,72,.35);background:rgba(255,182,72,.09);
+}
+.banner.info{border-color:rgba(91,140,255,.35);background:rgba(91,140,255,.09)}
+.banner strong{display:block;margin-bottom:3px;font-size:13.5px}
+
+/* ---- 銘柄カード ---- */
+.item{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:13px 14px;margin-bottom:10px;
+}
+.item-head{display:flex;align-items:flex-start;gap:10px}
+.rank{
+  flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--accent);
+  color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;
+  justify-content:center;margin-top:2px;
+}
+.item-title{flex:1;min-width:0}
+.item-title .nm{font-weight:700;font-size:15.5px;display:block}
+.item-title .sub{font-size:11.5px;color:var(--tx3);margin-top:1px}
+.item-fig{text-align:right;flex:0 0 auto}
+.item-fig .pct{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.item-fig .pr{font-size:11.5px;color:var(--tx3)}
+.metrics{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:11px;
+  padding-top:11px;border-top:1px solid var(--line);
+}
+.metric{text-align:center}
+.metric .k{font-size:10px;color:var(--tx3);display:block}
+.metric .v{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.reasons{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:5px}
+.reasons li{
+  font-size:11.5px;background:var(--card2);border:1px solid var(--line);
+  border-radius:8px;padding:3px 8px;color:var(--tx2);
+}
+.range{margin-top:9px}
+.range-bar{height:5px;border-radius:3px;background:var(--card2);position:relative;overflow:hidden}
+.range-fill{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,var(--down),var(--tx3),var(--up))}
+.range-mark{position:absolute;top:-3px;width:2px;height:11px;background:#fff;border-radius:1px}
+.range-lbl{display:flex;justify-content:space-between;font-size:10.5px;color:var(--tx3);margin-top:4px}
+
+/* ---- スパークライン ---- */
+.spark{display:block;width:100%;height:34px;margin-top:10px}
+
+/* ---- 市場環境グリッド ---- */
+.ctx{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.ctx-item{background:var(--card2);border-radius:11px;padding:9px 10px}
+.ctx-item .nm{font-size:11.5px;color:var(--tx2)}
+.ctx-item .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.ctx-item .c{font-size:11.5px;font-variant-numeric:tabular-nums}
+
+/* ---- テーブル ---- */
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th,.tbl td{padding:7px 5px;text-align:right;border-bottom:1px solid var(--line)}
+.tbl th{color:var(--tx3);font-weight:600;font-size:11px}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl tr:last-child td{border-bottom:none}
+.scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ---- FX ---- */
+.fx-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.dir{font-size:13px;font-weight:800;padding:3px 10px;border-radius:8px}
+.dir.buy{background:rgba(37,208,160,.16);color:var(--up)}
+.dir.sell{background:rgba(255,107,122,.16);color:var(--down)}
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:11px}
+.level{background:var(--card2);border-radius:10px;padding:8px;text-align:center}
+.level .k{font-size:10px;color:var(--tx3);display:block}
+.level .v{font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ---- 進捗バー ---- */
+.bar{height:8px;background:var(--card2);border-radius:5px;overflow:hidden;margin:8px 0 4px}
+.bar>span{display:block;height:100%;border-radius:5px;background:var(--accent)}
+
+/* ---- 読み込み ---- */
+.loading{text-align:center;padding:60px 0;color:var(--tx3)}
+.spinner{
+  width:28px;height:28px;margin:0 auto 12px;border-radius:50%;
+  border:3px solid var(--line);border-top-color:var(--accent);animation:spin .9s linear infinite;
+}
+.empty{text-align:center;padding:26px 12px;color:var(--tx3);font-size:13px}
+
+/* ---- フッター ---- */
+.foot{max-width:720px;margin:0 auto;padding:18px 16px calc(28px + var(--safe));
+  color:var(--tx3);font-size:11.5px;border-top:1px solid var(--line)}
+.foot p{margin:0 0 6px}
+.foot .src{color:#4d5878}
+
+@media (min-width:560px){
+  .ctx{grid-template-columns:repeat(4,1fr)}
+  body{font-size:15.5px}
+}
+
+/* ---- 設定フォーム ---- */
+.set-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.set-grid label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--tx3)}
+.set-grid input{background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:9px 10px;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;width:100%}
+.set-grid input:focus{outline:none;border-color:var(--accent)}
+
+/* ---- チャート ---- */
+.chart{display:block;width:100%;height:auto;margin:10px 0 2px;overflow:visible}
+.chart .ax{fill:var(--tx3);font-size:8px;font-family:inherit}
+.legend{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--tx3);margin-bottom:2px}
+.legend .lg-c{display:inline-block;width:9px;height:2.5px;border-radius:2px;margin-right:1px}
+.legend .lg-c.dash{background:repeating-linear-gradient(90deg,var(--tx3) 0 3px,transparent 3px 5px)}
+
+/* ---- 的中率バッジ ---- */
+.badges{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:9px}
+.badges .muted{font-size:11px}
+
+/* ---- カテゴリ切替 ---- */
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;padding:7px 14px;border-radius:999px;cursor:pointer;font-size:13px;
+  font-weight:600;background:var(--card);color:var(--tx2);border:1px solid var(--line);
+  white-space:nowrap;
+}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ---- 一覧の行 ---- */
+.row.mini{padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.row.mini:last-child{border-bottom:none}
+
+
+/* ---- 補助指標のサブチャート ---- */
+.chart.sub{height:auto;margin:2px 0 8px}
+.sub-lbl{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--tx2);
+  font-weight:600;margin-top:8px}
+.sub-lbl .num{font-size:11.5px}
+
+/* ---- テクニカルの裏付け ---- */
+.confirm{background:var(--card2);border-radius:11px;padding:10px 11px;margin-top:10px}
+.confirm-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.confirm-head .cf-hit{margin-left:auto;white-space:nowrap}
+@media (max-width:400px){
+  .confirm-head .cf-hit{margin-left:0;flex-basis:100%}
+  .checks{grid-template-columns:1fr}
+}
+.checks{list-style:none;margin:8px 0 0;padding:0;display:grid;
+  grid-template-columns:repeat(2,1fr);gap:4px 10px}
+.checks li{font-size:11.5px;color:var(--tx3)}
+.checks li.yes{color:var(--up)}
+.checks li.no{color:var(--tx3);opacity:.6}
+
+
+/* ---- 見送りのFXペア（参考表示） ---- */
+.item.dim{opacity:.62;border-style:dashed}
+.row.mini.dim{opacity:.6}
+.dir.off{background:var(--card2);color:var(--tx3)}
+
+/* ---- コスト前・為替の内訳行 ---- */
+.gross-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:7px;font-size:11.5px;color:var(--tx3)}
+
+/* ---- 警告 ---- */
+.warns{list-style:none;margin:9px 0 0;padding:9px 11px;border-radius:10px;
+  background:rgba(255,182,72,.1);border:1px solid rgba(255,182,72,.3)}
+.warns li{font-size:12px;color:var(--warn);margin-bottom:4px;padding-left:15px;position:relative}
+.warns li:last-child{margin-bottom:0}
+.warns li::before{content:"!";position:absolute;left:2px;font-weight:800}
+
+/* ---- 折りたたみの詳細 ---- */
+.detail{margin-top:11px;border-top:1px solid var(--line);padding-top:9px}
+.detail summary{font-size:12.5px;color:var(--accent);cursor:pointer;font-weight:600;
+  list-style:none;padding:3px 0}
+.detail summary::-webkit-details-marker{display:none}
+.detail summary::before{content:"▸ ";display:inline-block;transition:transform .15s}
+.detail[open] summary::before{content:"▾ "}
+.dsec{margin-top:12px}
+.dsec h4{font-size:11.5px;color:var(--tx2);margin:0 0 6px;font-weight:700;letter-spacing:.03em}
+
+/* ---- 保有 ---- */
+.add{width:100%;padding:9px 10px;border-radius:9px;border:1px solid var(--accent);
+  background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+.add:active{transform:scale(.98)}
+.del{margin-top:10px;width:100%;padding:7px;border-radius:8px;font-size:12px;
+  background:transparent;color:var(--tx3);border:1px solid var(--line);cursor:pointer}
+.del:active{color:var(--down);border-color:var(--down)}
+
+
+/* ---- 銘柄検索 ---- */
+.fld{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--tx3)}
+.fld input{background:var(--card2);border:1px solid var(--line);color:var(--tx);
+  border-radius:9px;padding:10px 11px;font-size:15px;width:100%}
+.fld input:focus{outline:none;border-color:var(--accent)}
+.sugg{list-style:none;margin:8px 0 0;padding:0;max-height:260px;overflow-y:auto;
+  border:1px solid var(--line);border-radius:10px;background:var(--card2)}
+.sugg li{padding:9px 11px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line)}
+.sugg li:last-child{border-bottom:none}
+.sugg li:active{background:var(--accent);color:#fff}
+.sugg li .muted{display:block;font-size:11px;margin-top:1px}

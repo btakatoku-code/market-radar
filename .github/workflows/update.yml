@@ -1,0 +1,72 @@
+name: 市場データの更新と配信
+
+# 日本時間 7:00 / 12:00 / 22:00 に実行する（cron は UTC 指定）。
+# GitHub 側の混雑で数分〜十数分遅れることがある。
+on:
+  schedule:
+    - cron: '0 22 * * *'   # JST 07:00
+    - cron: '0 3 * * *'    # JST 12:00
+    - cron: '0 13 * * *'   # JST 22:00
+  workflow_dispatch:        # 画面から手動実行するためのボタン
+  push:
+    branches: [main]
+    paths:
+      - 'engine/**'
+      - 'public/*.js'
+      - 'public/*.css'
+      - 'public/*.html'
+      - '.github/workflows/update.yml'
+    # public/data/** は除外。ここは本ワークフロー自身が更新するため。
+    # （GITHUB_TOKEN によるコミットは再実行を起こさない仕様だが、念のため）
+
+permissions:
+  contents: write     # 予測履歴をコミットするため
+  pages: write        # GitHub Pages へ配信するため
+  id-token: write
+
+concurrency:
+  group: market-radar
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # 外部ライブラリは使っていないので pip install は不要
+
+      - name: 分析を実行してデータを生成
+        working-directory: engine
+        run: python run.py
+        # 銘柄別の的中率は1週間ごとに再計算される（初回と週次のみ数分長くなる）
+
+      - name: 予測履歴と最新データをコミット
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/latest.json public/data/directory.json public/data/accuracy_by_asset.json data/history/
+          if git diff --staged --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "データ更新 $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 配信先URL
+        run: echo "${{ steps.deploy.outputs.page_url }}"
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
