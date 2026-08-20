@@ -85,3 +85,79 @@ def annotate(item, asset, calendar, due_ts):
             pass
     item["dividend_yield"] = dividend_yield(asset["bars"], asset["price"])
     return item
+
+
+# ---------------- 経済指標カレンダー ----------------
+# FXは重要指標（金利決定・雇用統計・物価）で大きく動く。テクニカルの延長では
+# 読めない変動なので、その日を避けるべきか／むしろ狙うべきかを実測するために使う。
+ECON_URL = "https://api.nasdaq.com/api/calendar/economicevents?date={}"
+
+# 主要5ペアに関係する国だけを見る
+ECON_COUNTRIES = {
+    "United States": "USD", "Japan": "JPY", "Euro Zone": "EUR",
+    "Germany": "EUR", "France": "EUR", "United Kingdom": "GBP",
+    "Australia": "AUD",
+}
+
+# 相場を動かしやすい指標の名前（小文字で部分一致）
+ECON_HIGH = [
+    "fomc", "fed ", "federal funds", "interest rate", "rate decision",
+    "non-farm", "nonfarm", "payroll", "unemployment rate", "employment change",
+    "cpi", "consumer price", "core pce", "pce price", "gdp",
+    "retail sales", "ecb", "boe ", "bank of england", "bank of japan",
+    "reserve bank of australia", "rba ", "jobless claims", "ppi",
+    "producer price", "ism manufacturing", "ism services",
+]
+
+
+def _econ_day(date_str):
+    try:
+        req = urllib.request.Request(ECON_URL.format(date_str), headers=UA)
+        raw = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+        rows = ((json.loads(raw).get("data") or {}).get("rows")) or []
+    except Exception:
+        return []
+    out = []
+    for r in rows:
+        country = (r.get("country") or "").strip()
+        cur = ECON_COUNTRIES.get(country)
+        if not cur:
+            continue
+        name = (r.get("eventName") or "").strip()
+        low = name.lower()
+        high = any(k in low for k in ECON_HIGH)
+        out.append({"country": country, "currency": cur, "name": name,
+                    "high": high, "actual": r.get("actual"),
+                    "consensus": r.get("consensus"), "date": date_str})
+    return out
+
+
+def economic_events(dates, use_cache=True, workers=8):
+    """指定した日付リストの経済指標を {日付: [イベント]} で返す。"""
+    dates = list(dates)
+    todo = []
+    out = {}
+    for d in dates:
+        c = sources._cached("econ_" + d, lambda: None, use_cache) if use_cache else None
+        if c is None:
+            todo.append(d)
+        else:
+            out[d] = c
+    if todo:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            for d, rows in zip(todo, ex.map(_econ_day, todo)):
+                sources._cached("econ_" + d, lambda rows=rows: rows, False)
+                out[d] = rows
+    return out
+
+
+def econ_summary(events_by_date, date_str):
+    """その日の重要指標のまとめ"""
+    rows = events_by_date.get(date_str) or []
+    high = [r for r in rows if r["high"]]
+    return {
+        "count": len(rows),
+        "high_count": len(high),
+        "currencies": sorted({r["currency"] for r in high}),
+        "names": [r["name"] for r in high][:6],
+    }

@@ -248,10 +248,19 @@ def build(use_cache=False, verbose=True):
     acc = (acc_data or {}).get("assets", {})
 
     if verbose:
-        print("3) 決算カレンダー")
+        print("3) 決算・経済指標カレンダー")
     calendar = events.earnings_calendar(days=40, use_cache=use_cache)
+    # FXのタイミング判定に使う。予測が実現するのは翌営業日なので、その日を見る。
+    today_d = _jst(now).date()
+    resolve_d = _jst(due_fx).date()
+    econ = events.economic_events(
+        sorted({today_d.isoformat(), resolve_d.isoformat()}), use_cache=use_cache)
+    econ_today = events.econ_summary(econ, today_d.isoformat())
+    econ_next = events.econ_summary(econ, resolve_d.isoformat())
     if verbose:
-        print("   {} 銘柄の決算予定を取得".format(len(calendar)))
+        print("   決算 {} 銘柄 / 重要指標 本日{}件・{}件（{}）".format(
+            len(calendar), econ_today["high_count"], econ_next["high_count"],
+            resolve_d.isoformat()))
 
     if verbose:
         print("4) 長期枠の分析")
@@ -395,6 +404,14 @@ def build(use_cache=False, verbose=True):
         s["reward_jpy"] = s["risk_jpy"] * s["risk_reward"]
         # スプレッドを引いた実質の期待変動
         s["expected_net"] = abs(s["expected_move"]) - s["spread_pct"] * 2
+        # 予測が実現する日に、その通貨に関係する指標があるか
+        pair_cur = set(fxmod.PAIR_CURRENCIES.get(s["key"], ()))
+        own = sorted(pair_cur & set(econ_next["currencies"]))
+        s["timing"] = fxmod.timing_quality(resolve_d.weekday(), bool(own))
+        s["timing"]["currencies"] = own
+        s["timing"]["events"] = [e["name"] for e in (econ.get(resolve_d.isoformat()) or [])
+                                 if e["high"] and e["currency"] in pair_cur][:5]
+        s["timing"]["date"] = resolve_d.isoformat()
 
     # ---- 市場環境 ----
     context = []
@@ -510,6 +527,9 @@ def build(use_cache=False, verbose=True):
         "fx_signal_pairs": len(config.FX_SIGNAL_PAIRS),
         "fx_pool_pairs": len(fx_assets),
         "fx_confirmed": fxmod.CONFIRMED,
+        "fx_timing": fxmod.TIMING,
+        "econ": {"today": econ_today, "next": econ_next,
+                 "next_date": resolve_d.isoformat()},
         "earnings_known": len(calendar),
         "elapsed": round(time.time() - t0, 1),
     }

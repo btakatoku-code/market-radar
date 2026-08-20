@@ -213,6 +213,105 @@ function confirmBlock(c, tradeable) {
     </div><ul class="checks">${items}</ul></div>`;
 }
 
+
+/* ---------- TradingView のチャート ----------
+   公式の埋め込みウィジェット（無料）。描画ツールや多数の指標が使えるので、
+   自前のチャートで足りないときの詳細確認に使う。
+
+   注意: ウィジェットは表示専用で、そこから数値を読み取ることはできない。
+   予測やスコアには一切関与しない（このアプリの計算は自前のデータで完結している）。
+   外部読み込みなので、開いたときだけ読み込む。 */
+function tvSymbol(x) {
+  const code = String(x.code || x.key || '');
+  switch (x.kind) {
+    case 'us_stock': case 'us_etf': return code;                 // 取引所は自動判別に任せる
+    case 'jp_stock': case 'jp_etf': case 'jp_reit': return 'TSE:' + code;
+    case 'crypto': return 'BINANCE:' + code;
+    case 'fx': return 'FX_IDC:' + code.replace('=X', '');
+    case 'metal': {
+      const m = { 'GC=F': 'TVC:GOLD', 'SI=F': 'TVC:SILVER', 'PL=F': 'TVC:PLATINUM' };
+      return m[code] || code;
+    }
+    default: return code;
+  }
+}
+
+/* 日本株はTradingViewの無料ウィジェットでは表示できない（取引所データの制限）。
+   埋め込みの代わりにサイトへのリンクを出す。 */
+const TV_EMBEDDABLE = { us_stock: 1, us_etf: 1, crypto: 1, fx: 1, metal: 1 };
+
+function tvBlock(x) {
+  const sym = tvSymbol(x);
+  if (!sym) return '';
+  if (!TV_EMBEDDABLE[x.kind]) {
+    return `<p class="tv-link"><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym)}"
+      target="_blank" rel="noopener noreferrer">TradingViewで詳細チャートを開く</a>
+      <span class="muted">日本株はアプリ内に埋め込めないため、別画面で開きます</span></p>`;
+  }
+  const id = 'tv' + Math.random().toString(36).slice(2, 9);
+  return `<details class="detail tv" data-sym="${esc(sym)}" data-box="${id}">
+    <summary>TradingViewの詳細チャートを開く</summary>
+    <div id="${id}" class="tv-box"><p class="muted">読み込み中…</p></div>
+    <p class="muted" style="margin:6px 0 0">TradingView提供の表示用チャートです。
+      このアプリの予測やスコアには使っていません。</p>
+  </details>`;
+}
+
+/* 開かれたときに初めてウィジェットを差し込む */
+function bindTradingView() {
+  document.querySelectorAll('details.tv').forEach(d => {
+    if (d.dataset.ready) return;
+    d.addEventListener('toggle', () => {
+      if (!d.open || d.dataset.ready) return;
+      d.dataset.ready = '1';
+      const box = document.getElementById(d.dataset.box);
+      if (!box) return;
+      box.innerHTML = '';
+      const dark = true;
+      const holder = document.createElement('div');
+      holder.className = 'tradingview-widget-container';
+      const inner = document.createElement('div');
+      inner.className = 'tradingview-widget-container__widget';
+      holder.appendChild(inner);
+      box.appendChild(holder);
+      const sc = document.createElement('script');
+      sc.type = 'text/javascript';
+      sc.async = true;
+      sc.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+      sc.innerHTML = JSON.stringify({
+        autosize: false, width: '100%', height: 420,
+        symbol: d.dataset.sym, interval: 'D', timezone: 'Asia/Tokyo',
+        theme: dark ? 'dark' : 'light', style: '1', locale: 'ja',
+        hide_side_toolbar: false, allow_symbol_change: false,
+        studies: ['MASimple@tv-basicstudies', 'RSI@tv-basicstudies'],
+        support_host: 'https://www.tradingview.com',
+      });
+      holder.appendChild(sc);
+    });
+  });
+}
+
+
+/* ---------- タイミング判定 ----------
+   曜日と経済指標の有無で的中率が変わることが検証で確認できた。
+   基準57.0%に対し、月水かつその通貨の指標がある日は64.2%。
+   前半・後半のどちらでも成立したので、除外はせず条件の良さとして示す。 */
+function timingBlock(t) {
+  if (!t) return '';
+  const k = t.level === 2 ? 'ok' : t.level === 1 ? 'wa' : 'no';
+  const ev = (t.events || []).length
+    ? `<ul class="checks" style="grid-template-columns:1fr">${t.events.map(e =>
+      `<li class="yes">・${esc(e)}</li>`).join('')}</ul>`
+    : '';
+  return `<div class="confirm"><div class="confirm-head">
+      <span class="pill ${k}">条件 ${esc(t.label)}</span>
+      <span class="muted">${esc(t.weekday)}曜 · ${t.has_event ? esc((t.currencies || []).join('/')) + 'の指標あり' : '指標なし'}</span>
+      <span class="muted num cf-hit">この条件の実測 ${(t.hit_rate * 100).toFixed(1)}%</span>
+    </div>
+    <p class="muted" style="margin:7px 0 0;font-size:11.5px">${esc(t.reason)}</p>
+    ${ev}</div>`;
+}
+
 /* ---------- 的中率バッジ（基準線と比べて色分け） ---------- */
 function hitBadge(hr, n, gain, base) {
   if (hr == null) return '<span class="pill">的中率 データ不足</span>';
@@ -337,6 +436,7 @@ function itemCard(x, showRank, chartH) {
     </div>
     ${reasons ? `<ul class="reasons">${reasons}</ul>` : ''}
     ${detailBlock(x)}
+    ${tvBlock(x)}
   </article>`;
 }
 
@@ -783,6 +883,7 @@ function viewFx(d) {
       ${macdChart(s.ind_chart)}
       ${rsiChart(s.ind_chart)}
       ${confirmBlock(s.confirm, on)}
+      ${timingBlock(s.timing)}
       <div class="levels">
         <div class="level"><span class="k">エントリー</span><span class="v">${num(s.entry, 4)}</span></div>
         <div class="level"><span class="k">損切り</span><span class="v down">${num(s.stop, 4)}</span></div>
@@ -801,6 +902,7 @@ function viewFx(d) {
         <div class="metric"><span class="k">コスト後</span><span class="v ${cls(s.expected_net)}">${pct(s.expected_net, 3)}</span></div>
       </div>
       <p class="muted" style="margin:9px 0 0">想定元本 ${yen(notional)}／必要証拠金 ${yen(notional / MAX_LEVERAGE)}</p>
+      ${tvBlock({ code: s.key, kind: 'fx' })}
     </article>`;
   }).join('');
 
@@ -813,7 +915,14 @@ function viewFx(d) {
     <div class="card"><h2>主要5ペア（${esc(d.horizon_fx_label || '')}先）</h2>
       <div class="row"><span class="muted">売買条件を満たしているペア</span>
         <span class="num"><strong class="${nTrade ? 'up' : ''}">${nTrade}</strong> / ${all.length}</span></div>
-      <p class="muted" style="margin:8px 0 0">5ペアは毎日すべて表示します。</p></div>
+      ${d.econ ? `<div class="row"><span class="muted">${esc(d.econ.next_date)}の重要指標</span>
+        <span class="num">${d.econ.next.high_count} 件
+          <span class="muted">${esc((d.econ.next.currencies || []).join(' '))}</span></span></div>` : ''}
+      <div class="row"><span class="muted">好条件の日の実測的中率</span>
+        <span class="num up">${((d.fx_timing && d.fx_timing.prime_hit || 0.642) * 100).toFixed(1)}%
+          <span class="muted">基準 ${((d.fx_timing && d.fx_timing.base_hit || 0.57) * 100).toFixed(1)}%</span></span></div>
+      <p class="muted" style="margin:8px 0 0">5ペアは毎日すべて表示します。
+        曜日と経済指標から「条件の良さ」も各ペアに出しています。</p></div>
     ${sigs || '<p class="empty">FXデータを取得できませんでした</p>'}`;
 }
 
@@ -924,6 +1033,19 @@ function viewAcc(d) {
       <td class="num">${(r.first * 100).toFixed(1)}%</td><td class="num">${(r.second * 100).toFixed(1)}%</td>
       <td class="num ${cls(r.net)}">${pct(r.net, 3)}</td></tr>`).join('')) : '';
 
+  const tim = v.fx.timing ? T(v.fx.timing.title, v.fx.timing.summary + ' ' + v.fx.timing.note,
+    '<th>区分</th><th>的中率</th><th>t値</th><th>前半</th><th>後半</th><th>日数</th>',
+    v.fx.timing.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
+      <td class="num ${r.hit >= 0.6 ? 'up' : r.hit < 0.53 ? 'down' : ''}">${(r.hit * 100).toFixed(1)}%</td>
+      <td class="num">${num(r.t, 2)}</td>
+      <td class="num">${(r.first * 100).toFixed(1)}%</td>
+      <td class="num">${(r.second * 100).toFixed(1)}%</td>
+      <td class="num">${r.days}</td></tr>`).join('')) : '';
+
+  const tv = v.tradingview ? `<div class="card"><h2>${esc(v.tradingview.title)}</h2>
+    <p style="font-size:13px;margin:0 0 8px">${esc(v.tradingview.summary)}</p>
+    <p class="muted">${esc(v.tradingview.note)}</p></div>` : '';
+
   const ind = v.fx.indicators ? T(v.fx.indicators.title, v.fx.indicators.note,
     '<th>条件</th><th>件数</th><th>的中率</th><th>1回あたり</th><th>t値</th>',
     v.fx.indicators.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">表示に採用</span>' : ''}</td>
@@ -945,7 +1067,7 @@ function viewAcc(d) {
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
     ${v.costs ? esc(v.costs.summary) : ''}</div>
-  ${costTbl}${reg}${rules}${caps}${split}${fxr}${psel}${psplit}${ind}
+  ${costTbl}${reg}${rules}${caps}${split}${fxr}${psel}${psplit}${tim}${ind}${tv}
   <div class="card"><h2>検証方法と注意点</h2>
     <p style="font-size:13px">${esc(v.method)}</p>
     <p class="muted">${esc(v.data_note)}</p>
@@ -961,6 +1083,7 @@ function render() {
   } catch (e) {
     $('#main').innerHTML = `<p class="empty">表示中にエラーが発生しました<br><span class="muted">${esc(e.message)}</span></p>`;
   }
+  bindTradingView();
   if (VIEW === 'fx') bindSettings();
   if (VIEW === 'rank') bindChips();
   if (VIEW === 'hold') bindHoldings();

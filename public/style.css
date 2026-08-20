@@ -260,3 +260,12 @@ main{padding:14px 12px 8px;max-width:720px;margin:0 auto}
 .sugg li:last-child{border-bottom:none}
 .sugg li:active{background:var(--accent);color:#fff}
 .sugg li .muted{display:block;font-size:11px;margin-top:1px}
+
+
+/* ---- TradingView 埋め込み ---- */
+.detail.tv summary{color:var(--warn)}
+.tv-box{margin-top:9px;border-radius:10px;overflow:hidden;min-height:60px;background:var(--card2)}
+.tv-box iframe{display:block;width:100%!important;border:0}
+.tv-link{margin:11px 0 0;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px}
+.tv-link a{color:var(--warn);font-weight:600;text-decoration:none}
+.tv-link .muted{display:block;font-size:11px;margin-top:2px}

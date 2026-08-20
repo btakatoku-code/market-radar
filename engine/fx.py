@@ -43,6 +43,53 @@ CONFIRMED = {
 }
 UNCONFIRMED_HIT = 0.571         # 裏付けを問わない場合
 
+# タイミングの実測（確信度56%以上のうち、曜日と経済指標で絞った場合）。
+# 前半・後半に割ってもどちらでも成立したため採用している。
+#   基準（全体）        57.0%（t 3.91・353日）
+#   月水かつ自通貨の指標  64.2%（t 4.86・126日／前半64.7% 後半63.6%）
+TIMING = {
+    "prime_days": (0, 2),        # 月曜・水曜
+    "prime_hit": 0.642,
+    "base_hit": 0.570,
+    "event_hit": 0.583,          # 自通貨の指標あり（曜日は問わない）
+    "no_event_hit": 0.536,
+    "weak_days": (4,),           # 金曜は51.7%と弱い
+    "weak_hit": 0.517,
+    "t_stat": 4.86,
+    "days": 126,
+}
+
+
+def timing_quality(weekday, has_own_event):
+    """曜日と経済指標から、その日の条件の良さを判定する。
+
+    検証では「月曜または水曜」かつ「その通貨に関係する指標がある日」で
+    的中率が57.0%→64.2%に上がった。前半・後半のどちらでも成立している。
+    ただし条件を満たす日は全体の36%しかない。
+    """
+    prime = weekday in TIMING["prime_days"] and has_own_event
+    weak = weekday in TIMING["weak_days"]
+    if prime:
+        level, label, hit = 2, "好条件", TIMING["prime_hit"]
+    elif weak:
+        level, label, hit = 0, "弱い曜日", TIMING["weak_hit"]
+    elif has_own_event:
+        level, label, hit = 1, "標準", TIMING["event_hit"]
+    else:
+        level, label, hit = 0, "指標なし", TIMING["no_event_hit"]
+    names = ["月", "火", "水", "木", "金", "土", "日"]
+    return {
+        "level": level, "label": label, "hit_rate": hit,
+        "weekday": names[weekday] if 0 <= weekday < 7 else "?",
+        "has_event": bool(has_own_event),
+        "prime": prime,
+        "reason": ("{}曜日で、この通貨に関係する経済指標がある日です".format(names[weekday])
+                   if prime else
+                   ("{}曜日は検証で的中率が低い日です".format(names[weekday]) if weak else
+                    ("この通貨に関係する経済指標がある日です" if has_own_event else
+                     "この通貨に関係する経済指標がない日です"))),
+    }
+
 # 主要通貨ペアの片道スプレッド目安（対価格比）。国内FX業者の標準的な水準。
 SPREAD = {
     "USDJPY=X": 0.0000125, "EURJPY=X": 0.0000200, "GBPJPY=X": 0.0000550,
@@ -52,6 +99,18 @@ SPREAD = {
     "USDCAD=X": 0.0000700, "EURGBP=X": 0.0000700, "XAUUSD=X": 0.0003000,
 }
 DEFAULT_SPREAD = 0.00007
+
+# 各ペアを構成する通貨。経済指標がそのペアに関係するかの判定に使う。
+PAIR_CURRENCIES = {
+    "USDJPY=X": ("USD", "JPY"), "EURJPY=X": ("EUR", "JPY"),
+    "GBPJPY=X": ("GBP", "JPY"), "AUDJPY=X": ("AUD", "JPY"),
+    "NZDJPY=X": ("NZD", "JPY"), "CADJPY=X": ("CAD", "JPY"),
+    "CHFJPY=X": ("CHF", "JPY"), "EURUSD=X": ("EUR", "USD"),
+    "GBPUSD=X": ("GBP", "USD"), "AUDUSD=X": ("AUD", "USD"),
+    "NZDUSD=X": ("NZD", "USD"), "USDCHF=X": ("USD", "CHF"),
+    "USDCAD=X": ("USD", "CAD"), "EURGBP=X": ("EUR", "GBP"),
+    "XAUUSD=X": ("XAU", "USD"),
+}
 MAX_LEVERAGE = 25.0             # 国内FXの個人口座の上限
 
 
