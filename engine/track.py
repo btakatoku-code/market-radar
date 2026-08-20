@@ -137,3 +137,71 @@ def summary(predictions):
     out["per_asset"] = per_asset[:40]
     out["total_logged"] = len(predictions)
     return out
+
+
+RUNS_FILE = os.path.join(HISTORY_DIR, "runs.jsonl")
+
+
+def log_run(ts, counts):
+    """実行のたびに1行だけ記録する。動いている証拠として画面に出すため。"""
+    _ensure()
+    with open(RUNS_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": ts, **counts}, ensure_ascii=False) + "\n")
+
+
+def recent_runs(limit=12):
+    _ensure()
+    if not os.path.exists(RUNS_FILE):
+        return []
+    out = []
+    with open(RUNS_FILE, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+    return out[-limit:][::-1]
+
+
+def progress(predictions, assets_by_key, now_ts, limit=24):
+    """まだ期限が来ていない予測の途中経過。
+
+    「予測は+1.4%、いまのところ+0.5%、残り18営業日」のように、
+    採点を待たずに動きが見える形にする。数日たたないと何も出ないと、
+    アプリが生きているのか分からないため。
+    """
+    open_rows = [r for r in predictions if r.get("actual") is None]
+    rows = []
+    for r in open_rows:
+        a = assets_by_key.get(r["key"])
+        if not a or not r.get("price"):
+            continue
+        cur = a["bars"]["c"][-1]
+        actual = cur / r["price"] - 1
+        pred = r.get("pred") or 0.0
+        left = max(0, int((r["due"] - now_ts) // 86400))
+        rows.append({
+            "key": r["key"], "name": r.get("name", r["key"]),
+            "bucket": r["bucket"], "date": r["date"],
+            "pred": pred, "so_far": actual,
+            "price": r["price"], "now": round(cur, 4),
+            "days_left": left,
+            "on_track": bool((pred > 0) == (actual > 0)) if pred else None,
+        })
+    if not rows:
+        return None
+    judged = [x for x in rows if x["on_track"] is not None]
+    agg = {
+        "open": len(rows),
+        "on_track": sum(1 for x in judged if x["on_track"]),
+        "judged": len(judged),
+        "mean_pred": sum(x["pred"] for x in rows) / len(rows),
+        "mean_so_far": sum(x["so_far"] for x in rows) / len(rows),
+    }
+    agg["on_track_rate"] = (agg["on_track"] / agg["judged"]) if agg["judged"] else None
+    # 期限が近い順に並べ、画面に出す分だけ残す
+    rows.sort(key=lambda x: (x["days_left"], -abs(x["pred"])))
+    return {"summary": agg, "items": rows[:limit]}

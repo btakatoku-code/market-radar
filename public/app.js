@@ -405,6 +405,86 @@ function planLines(p) {
   return L;
 }
 
+
+/* ---------- 動作状況 ----------
+   数字が並んでいても、それが今日のものか止まっているのか分からない。
+   最終更新からの経過と次の更新予定、実行履歴を出して、生きていることを示す。 */
+function hoursAgo(iso) {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!isFinite(t)) return null;
+  return (Date.now() - t) / 3600000;
+}
+
+function nextUpdateLabel() {
+  // 日本時間の 7:00 / 12:00 / 22:00 に実行される
+  const now = new Date();
+  const jst = new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+  const slots = [7, 12, 22];
+  let h = slots.find(x => x > jst.getHours() + jst.getMinutes() / 60);
+  let day = '今日';
+  if (h === undefined) { h = slots[0]; day = '明日'; }
+  const diff = ((h - jst.getHours() - jst.getMinutes() / 60) + 24) % 24;
+  return { label: day + ' ' + h + ':00', inHours: diff };
+}
+
+function statusCard(d) {
+  const ago = hoursAgo(d.generated_at);
+  const nx = nextUpdateLabel();
+  const fresh = ago == null ? null : ago < 14;   // 更新間隔は最大11時間
+  const runs = d.runs || [];
+  const runRows = runs.slice(0, 6).map(r => {
+    const t = new Date(r.ts * 1000);
+    const jst = new Date(t.getTime() + (t.getTimezoneOffset() + 540) * 60000);
+    const md = (jst.getMonth() + 1) + '/' + jst.getDate() + ' '
+      + String(jst.getHours()).padStart(2, '0') + ':' + String(jst.getMinutes()).padStart(2, '0');
+    return `<div class="row mini"><span class="muted">${md}</span>
+      <span class="muted num">記録 ${r.added || 0}件 / 採点 ${r.scored || 0}件 / 累計 ${r.total || 0}件</span></div>`;
+  }).join('');
+
+  return `<div class="card"><h2>動作状況</h2>
+    <div class="row"><span class="muted">最終更新</span>
+      <span class="num"><span class="pill ${fresh === null ? '' : fresh ? 'ok' : 'no'}">${
+    ago == null ? '不明' : ago < 1 ? Math.round(ago * 60) + '分前' : ago.toFixed(1) + '時間前'}</span></span></div>
+    <div class="row"><span class="muted">次の更新</span>
+      <span class="num">${esc(nx.label)} <span class="muted">（あと${nx.inHours.toFixed(1)}時間）</span></span></div>
+    <div class="row"><span class="muted">分析した銘柄</span><span class="num">${(d.universe_size || 0).toLocaleString('ja-JP')} 件</span></div>
+    <div class="row"><span class="muted">記録した予測</span><span class="num">${(d.accuracy && d.accuracy.total_logged || 0).toLocaleString('ja-JP')} 件</span></div>
+    ${runRows ? `<div style="margin-top:10px"><div class="muted" style="font-size:11px;margin-bottom:4px">これまでの実行</div>${runRows}</div>` : ''}
+    <p class="muted" style="margin-top:9px">この時刻がずっと変わらない場合は自動更新が止まっています。
+      GitHubのActionsタブから再開できます。</p></div>`;
+}
+
+/* 進行中の予測の途中経過。採点を待たずに動きが見えるようにする。 */
+function progressCard(d) {
+  const p = d.progress;
+  if (!p || !p.summary) return '';
+  const g = p.summary;
+  const rate = g.on_track_rate;
+  const rows = (p.items || []).map(x => `<tr>
+    <td>${esc(x.name)}<br><span class="muted">${esc(x.date)}時点 · 残り${x.days_left}日</span></td>
+    <td class="num ${cls(x.pred)}">${pct(x.pred)}</td>
+    <td class="num ${cls(x.so_far)}">${pct(x.so_far)}</td>
+    <td class="num">${x.on_track == null ? '—' : (x.on_track ? '<span class="up">合</span>' : '<span class="down">逆</span>')}</td>
+  </tr>`).join('');
+
+  return `<div class="card"><h2>進行中の予測（途中経過）</h2>
+    <div class="row"><span class="muted">採点待ちの予測</span><span class="num">${g.open} 件</span></div>
+    <div class="row"><span class="muted">いま方向が合っているもの</span>
+      <span class="num ${rate == null ? '' : rate >= 0.5 ? 'up' : 'down'}">
+        ${g.on_track} / ${g.judged}${rate == null ? '' : '（' + (rate * 100).toFixed(0) + '%）'}</span></div>
+    <div class="bar"><span style="width:${rate == null ? 0 : (rate * 100).toFixed(0)}%;
+      background:${rate == null ? 'var(--tx3)' : rate >= 0.5 ? 'var(--up)' : 'var(--down)'}"></span></div>
+    <div class="row"><span class="muted">予測の平均 / 現時点の平均</span>
+      <span class="num"><span class="${cls(g.mean_pred)}">${pct(g.mean_pred)}</span>
+        / <span class="${cls(g.mean_so_far)}">${pct(g.mean_so_far)}</span></span></div>
+    <div class="scroll-x" style="margin-top:10px"><table class="tbl">
+      <tr><th>銘柄</th><th>予測</th><th>いま</th><th>方向</th></tr>${rows}
+    </table></div>
+    <p class="muted" style="margin-top:9px">期限が来ると自動で採点され、「このアプリの実績」に反映されます。
+      途中経過なので、ここでの「合」がそのまま的中になるわけではありません。</p></div>`;
+}
+
 /* ---------- 今日 ---------- */
 function viewHome(d) {
   const r = d.regime || {}, u = d.usdjpy || {};
@@ -474,6 +554,7 @@ function viewHome(d) {
   </div>` : '';
 
   return `
+  ${statusCard(d)}
   <div class="banner"><strong>この数字の読み方</strong>
     大きく出している％は<b>売買コストを引いたあと</b>の値です。
     株・貴金属・暗号資産は${esc(d.horizon_long_label || '')}先、FXは${esc(d.horizon_fx_label || '')}先の予測。
@@ -489,10 +570,9 @@ function viewHome(d) {
     <p class="muted" style="margin-top:8px">売買条件を満たしているのは
       ${fxAll.filter(x => x.tradeable).length} / ${fxAll.length} ペアです。</p></div>
   <div class="card"><h2>分析の規模</h2>
-    <div class="row"><span class="muted">分析銘柄</span><span class="num">${(d.universe_size || 0).toLocaleString('ja-JP')} 件</span></div>
     <div class="row"><span class="muted">参照した過去局面</span><span class="num">${(d.pool_size || 0).toLocaleString('ja-JP')} 件</span></div>
     <div class="row"><span class="muted">決算日を把握している銘柄</span><span class="num">${(d.earnings_known || 0).toLocaleString('ja-JP')} 件</span></div>
-    <div class="row"><span class="muted">記録済みの予測</span><span class="num">${(d.accuracy && d.accuracy.total_logged || 0).toLocaleString('ja-JP')} 件</span></div>
+    <div class="row"><span class="muted">的中率を算出済みの銘柄</span><span class="num">${(d.asset_accuracy_n || 0).toLocaleString('ja-JP')} 件</span></div>
     <div class="row"><span class="muted">更新予定</span><span class="muted">${esc(d.next_update)}</span></div>
   </div>`;
 }
@@ -755,7 +835,10 @@ function viewAcc(d) {
       ${stat(a.recent30, '直近30件')}
     </table>
     <p class="muted" style="margin-top:9px">記録済み ${(a.total_logged || 0).toLocaleString('ja-JP')} 件
-      ／ 採点待ち ${(a.overall && a.overall.pending) ?? a.total_logged ?? 0} 件。</p></div>`;
+      ／ 採点待ち ${(a.overall && a.overall.pending) ?? a.total_logged ?? 0} 件。
+      ${a.overall ? '' : 'FXは翌営業日、株は1か月後に採点されるため、最初の実績が出るまで数日かかります。それまでは下の「進行中の予測」で途中経過を確認できます。'}</p></div>`;
+
+  const prog = progressCard(d);
 
   const bl = d.baseline_long, bf = d.baseline_fx;
   const cmp = (bl || bf) ? `<div class="card"><h2>モデルは基準線を上回っているか</h2>
@@ -790,7 +873,7 @@ function viewAcc(d) {
       NISA口座なら非課税です。1か月で回転させるとコストの影響が大きいので、
       各カードの「コストを取り返すのに必要な保有期間」も見てください。</p></div>` : '';
 
-  if (!v) return live + cmp + costCard + '<p class="empty">検証データを読み込めませんでした</p>';
+  if (!v) return live + prog + cmp + costCard + '<p class="empty">検証データを読み込めませんでした</p>';
 
   const T = (title, note, head, rows) => `<div class="card"><h2>${esc(title)}</h2>
     <div class="scroll-x"><table class="tbl"><tr>${head}</tr>${rows}</table></div>
@@ -857,7 +940,7 @@ function viewAcc(d) {
 
   const cav = v.caveats.map(c => `<li style="margin-bottom:5px">${esc(c)}</li>`).join('');
 
-  return live + cmp + costCard + `
+  return live + prog + cmp + costCard + `
   <div class="banner"><strong>事前検証の結論</strong>
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。

@@ -445,6 +445,10 @@ def build(use_cache=False, verbose=True):
     track.score(preds, by_key, now)
     track.rewrite(preds)
     acc_live = track.summary(preds)
+    prog = track.progress(preds, by_key, now)
+    track.log_run(now, {"scored": n_scored, "added": n_added, "total": len(preds),
+                        "universe": len(universe)})
+    runs = track.recent_runs(12)
     if verbose:
         print("   採点 {} 件 / 新規記録 {} 件 / 累計 {} 件".format(
             n_scored, n_added, len(preds)))
@@ -482,6 +486,8 @@ def build(use_cache=False, verbose=True):
         "context": context, "regime": snap,
         "fear_greed": fng[0] if fng else None,
         "accuracy": acc_live,
+        "progress": prog,
+        "runs": runs,
         "baseline_long": (acc_data or {}).get("baseline_long"),
         "baseline_fx": (acc_data or {}).get("baseline_fx"),
         "asset_accuracy_built": (acc_data or {}).get("built_at"),
