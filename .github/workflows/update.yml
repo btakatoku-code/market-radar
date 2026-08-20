@@ -47,18 +47,32 @@ jobs:
 
       - name: 予測履歴と最新データをコミット
         run: |
+          set -e
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data/latest.json public/data/directory.json public/data/accuracy_by_asset.json data/history/
-          if git diff --staged --quiet; then
-            echo "変更なし"
-          else
-            git commit -m "データ更新 $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')"
-            git push
-          fi
+          git config merge.ours.driver true
+          FILES="public/data/latest.json public/data/directory.json public/data/accuracy_by_asset.json data/history/"
+          # 実行中に手元から push されていることがあるので、
+          # リモートの先端の上に自分の生成物だけを乗せ直してから送る。
+          for i in 1 2 3; do
+            git fetch -q origin main
+            git reset -q --soft origin/main
+            git add $FILES
+            if git diff --staged --quiet; then
+              echo "変更なし"
+              exit 0
+            fi
+            git commit -q -m "データ更新 $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')"
+            if git push -q origin HEAD:main; then
+              echo "送信しました（$i 回目）"
+              exit 0
+            fi
+            echo "リモートが更新されていたため、やり直します（$i 回目）"
+            sleep 5
+          done
+          echo "3回試しても送信できませんでした"
+          exit 1
 
-      # enablement: true にしておくと、Pagesが未作成でもワークフロー側で有効化する。
-      # 画面での設定に依存しなくなるので、初回でつまずかない。
       - uses: actions/configure-pages@v5
         with:
           enablement: true
