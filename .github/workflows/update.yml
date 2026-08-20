@@ -57,7 +57,11 @@ jobs:
             git push
           fi
 
+      # enablement: true にしておくと、Pagesが未作成でもワークフロー側で有効化する。
+      # 画面での設定に依存しなくなるので、初回でつまずかない。
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
