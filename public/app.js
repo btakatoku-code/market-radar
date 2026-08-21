@@ -515,22 +515,24 @@ function hoursAgo(iso) {
   return (Date.now() - t) / 3600000;
 }
 
-function nextUpdateLabel() {
-  // 日本時間の 7:00 / 12:00 / 22:00 に実行される
+function nextUpdateLabel(hours) {
+  // 実行時刻は配信データから受け取る（既定は日本時間の偶数時＝2時間ごと）
+  const slots = (hours && hours.length) ? hours.slice().sort((a, b) => a - b)
+    : [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
   const now = new Date();
   const jst = new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
-  const slots = [7, 12, 22];
-  let h = slots.find(x => x > jst.getHours() + jst.getMinutes() / 60);
+  const cur = jst.getHours() + jst.getMinutes() / 60;
+  let h = slots.find(x => x > cur);
   let day = '今日';
   if (h === undefined) { h = slots[0]; day = '明日'; }
-  const diff = ((h - jst.getHours() - jst.getMinutes() / 60) + 24) % 24;
-  return { label: day + ' ' + h + ':00', inHours: diff };
+  const diff = ((h - cur) + 24) % 24;
+  return { label: day + ' ' + String(h).padStart(2, '0') + ':00', inHours: diff };
 }
 
 function statusCard(d) {
   const ago = hoursAgo(d.generated_at);
-  const nx = nextUpdateLabel();
-  const fresh = ago == null ? null : ago < 14;   // 更新間隔は最大11時間
+  const nx = nextUpdateLabel(d.update_hours);
+  const fresh = ago == null ? null : ago < 5;    // 2時間ごとなので5時間を超えたら異常
   const runs = d.runs || [];
   const runRows = runs.slice(0, 6).map(r => {
     const t = new Date(r.ts * 1000);
@@ -545,12 +547,14 @@ function statusCard(d) {
     <div class="row"><span class="muted">最終更新</span>
       <span class="num"><span class="pill ${fresh === null ? '' : fresh ? 'ok' : 'no'}">${
     ago == null ? '不明' : ago < 1 ? Math.round(ago * 60) + '分前' : ago.toFixed(1) + '時間前'}</span></span></div>
+    <div class="row"><span class="muted">更新の間隔</span><span class="num">2時間ごと</span></div>
     <div class="row"><span class="muted">次の更新</span>
       <span class="num">${esc(nx.label)} <span class="muted">（あと${nx.inHours.toFixed(1)}時間）</span></span></div>
     <div class="row"><span class="muted">分析した銘柄</span><span class="num">${(d.universe_size || 0).toLocaleString('ja-JP')} 件</span></div>
     <div class="row"><span class="muted">記録した予測</span><span class="num">${(d.accuracy && d.accuracy.total_logged || 0).toLocaleString('ja-JP')} 件</span></div>
     ${runRows ? `<div style="margin-top:10px"><div class="muted" style="font-size:11px;margin-bottom:4px">これまでの実行</div>${runRows}</div>` : ''}
-    <p class="muted" style="margin-top:9px">この時刻がずっと変わらない場合は自動更新が止まっています。
+    <p class="muted" style="margin-top:9px">2時間ごとに更新されます。
+      「最終更新」が5時間以上前のままなら自動更新が止まっています。
       GitHubのActionsタブから再開できます。</p></div>`;
 }
 
@@ -632,14 +636,17 @@ function viewHome(d) {
   const stH = settings();
   const fxAll = ((d.fx && d.fx.signals) || []).map(x => Object.assign({}, x, {
     tradeable: x.confidence >= stH.fxConf,
-  }));
-  const fxTop = fxAll.map(s => `
+  })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
+    || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
+    || b.confidence - a.confidence);
+  const fxTop = fxAll.map((s, i) => `
     <div class="row mini ${s.tradeable ? '' : 'dim'}">
-      <span>${esc(s.name)}
+      <span><strong>${i + 1}.</strong> ${esc(s.name)}
         <span class="pill ${s.tradeable ? (s.dir_sign > 0 ? 'ok' : 'no') : ''}">${esc(s.direction)}</span>
         ${s.tradeable ? '' : '<span class="muted">見送り</span>'}</span>
       <span class="muted num">確信度 ${(s.confidence * 100).toFixed(0)}%
-        / 的中${s.hit_rate == null ? '—' : (s.hit_rate * 100).toFixed(0) + '%'}</span>
+        / 実測${s.conf_stats && s.conf_stats.conf ? (s.conf_stats.hit * 100).toFixed(1) + '%' : '—'}
+        / 裏付け${s.confirm ? esc(s.confirm.label) : '—'}</span>
     </div>`).join('');
 
   const dv = d.diversification;
@@ -837,7 +844,9 @@ function viewFx(d) {
   const all = (d.fx.signals || []).map(x => Object.assign({}, x, {
     tradeable: x.confidence >= st.fxConf,
     status: x.confidence >= st.fxConf ? 'シグナルあり' : '見送り',
-  }));
+  })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
+    || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
+    || b.confidence - a.confidence);
   const nTrade = all.filter(x => x.tradeable).length;
   const lv = (d.fx_levels || []).slice().sort((a, b) =>
     Math.abs(a.conf - st.fxConf) - Math.abs(b.conf - st.fxConf))[0];
@@ -877,13 +886,21 @@ function viewFx(d) {
     const lev = p.capital ? notional / p.capital : 0;
     return `<article class="item ${on ? '' : 'dim'}">
       <div class="fx-head">
-        <div><h3 style="margin:0">${esc(s.name)}
-          <span class="pill ${on ? 'ok' : ''}">${esc(s.status || (on ? 'シグナルあり' : '見送り'))}</span></h3>
-          <span class="muted">${num(s.price, 4)} · ATR ${(s.atr_pct * 100).toFixed(2)}% · 予測 ${pct(s.expected_move, 3)}</span></div>
+        <div style="display:flex;gap:9px;align-items:flex-start;flex:1;min-width:0">
+          ${s.order ? `<div class="rank" style="margin-top:3px">${s.order}</div>` : ''}
+          <div style="min-width:0">
+            <h3 style="margin:0">${esc(s.name)}
+              <span class="pill ${on ? 'ok' : ''}">${esc(s.status || (on ? 'シグナルあり' : '見送り'))}</span></h3>
+            <span class="muted">${num(s.price, 4)} · ATR ${(s.atr_pct * 100).toFixed(2)}% · 予測 ${pct(s.expected_move, 3)}</span>
+          </div>
+        </div>
         <span class="dir ${on ? (s.dir_sign > 0 ? 'buy' : 'sell') : 'off'}">${esc(s.direction)}</span>
       </div>
       <div class="badges">
         <span class="pill ${on ? 'ok' : 'wa'}">確信度 ${(s.confidence * 100).toFixed(0)}%</span>
+        ${s.conf_stats && s.conf_stats.conf
+      ? `<span class="pill ${s.conf_stats.hit >= 0.58 ? 'ok' : 'wa'}">この区分の実測 ${(s.conf_stats.hit * 100).toFixed(1)}%</span>`
+      : '<span class="pill">実測区分に届かず</span>'}
         ${hitBadge(s.hit_rate, s.hit_n, s.hit_gain, BASE_FX)}
       </div>
       ${on ? '' : `<p class="muted" style="margin:8px 0 0">確信度が${(st.fxConf * 100).toFixed(0)}%に届いていません。
@@ -931,8 +948,12 @@ function viewFx(d) {
       <div class="row"><span class="muted">好条件の日の実測的中率</span>
         <span class="num up">${((d.fx_timing && d.fx_timing.prime_hit || 0.642) * 100).toFixed(1)}%
           <span class="muted">基準 ${((d.fx_timing && d.fx_timing.base_hit || 0.57) * 100).toFixed(1)}%</span></span></div>
-      <p class="muted" style="margin:8px 0 0">5ペアは毎日すべて表示します。
+      <p class="muted" style="margin:8px 0 0">5ペアは毎日すべて表示し、
+        <b>的中確率の高い順 → 裏付けの強い順</b>で並べています。
         確信度の下限は資金設定で変更できます。</p>
+      <p class="muted" style="margin:6px 0 0">なお「14ペアから的中確率上位5つを毎日選び直す」方式も
+        実測しましたが、勝率が58.0%→56.4%（検証期間3通りすべて）と下がったため採用していません。
+        主要5ペア自体の成績が良く、入れ替えると質の劣るペアが混ざるためです。</p>
       ${(d.fx_levels || []).length ? `<div class="scroll-x" style="margin-top:10px"><table class="tbl">
         <tr><th>確信度</th><th>勝率</th><th>1日</th><th>1回あたり</th><th>期間をずらすと</th></tr>
         ${d.fx_levels.map(l => `<tr>

@@ -414,7 +414,6 @@ def build(use_cache=False, verbose=True):
         s["timing"]["events"] = [e["name"] for e in (econ.get(resolve_d.isoformat()) or [])
                                  if e["high"] and e["currency"] in pair_cur][:5]
         s["timing"]["date"] = resolve_d.isoformat()
-        s["conf_stats"] = fxmod.confidence_stats(s["confidence"])
 
     # ---- 市場環境 ----
     context = []
@@ -499,7 +498,8 @@ def build(use_cache=False, verbose=True):
         "directory_count": len(directory),
         "generated_at": generated.isoformat(),
         "generated_label": generated.strftime("%Y年%m月%d日 %H:%M"),
-        "next_update": "毎日 7:00 / 12:00 / 22:00（日本時間）",
+        "next_update": "2時間ごと（日本時間の偶数時）",
+        "update_hours": config.UPDATE_HOURS_JST,
         "top5": top5, "pinned": pinned, "categories": categories,
         "diversification": diversification,
         "fx": {"signals": fx_signals, "plan": fx_plan},

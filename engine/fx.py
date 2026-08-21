@@ -68,8 +68,22 @@ TIMING_RETRACTED = {
 
 
 def confidence_stats(conf):
-    """指定した確信度に最も近い実測値を返す"""
+    """指定した確信度に最も近い実測値を返す（設定画面の表示用）"""
     return min(CONFIDENCE_LEVELS, key=lambda x: abs(x["conf"] - conf))
+
+
+def confidence_stats_for(conf):
+    """その確信度が実際に届いている区分を返す。
+
+    確信度62%なら「60%以上（実測62.8%）」の区分。
+    どの区分にも届かなければ、実測されていない扱いにする。
+    """
+    reached = [l for l in CONFIDENCE_LEVELS if conf >= l["conf"]]
+    if not reached:
+        return {"conf": None, "hit": 0.50, "per_day": None, "mean": None,
+                "t": None, "label": "実測区分に届かず"}
+    best = max(reached, key=lambda l: l["conf"])
+    return dict(best, label="{:.0f}%以上".format(best["conf"] * 100))
 
 
 # 主要通貨ペアの片道スプレッド目安（対価格比）。国内FX業者の標準的な水準。
@@ -218,10 +232,24 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None):
     # 5ペアは毎日すべて表示する。確信度は「見送りかどうか」の印として使う。
     # 検証で優位性が確認できたのは確信度56%以上のときだけなので、
     # それ未満は tradeable=False として区別する。
+    #
+    # 並び順は「的中確率の高い順 → 裏付けの強い順」。
+    # 的中確率は、その確信度が属する区分の実測勝率を使う（53%区分=52.3%、
+    # 56%区分=58.0%、60%区分=62.8%）。同じ区分の中では裏付けの強さで並べ、
+    # それも同じなら確信度そのもので並べる。
+    #
+    # なお「14ペアから的中確率の高い上位5つを毎日選び直す」方式も実測したが、
+    # 勝率が58.0%→56.4%（検証期間3通りすべて）と下がったため採用していない。
+    # 主要5ペア自体の成績が良く、入れ替えると質の劣るペアが混ざるため。
     for x in out:
         x["tradeable"] = x["confidence"] >= config.FX_MIN_CONFIDENCE
         x["status"] = "シグナルあり" if x["tradeable"] else "見送り"
-    out.sort(key=lambda x: (-x["tradeable"], -x["confidence"], -x["abs_move"]))
+        x["conf_stats"] = confidence_stats_for(x["confidence"])
+        x["expected_hit"] = x["conf_stats"]["hit"]
+    out.sort(key=lambda x: (-x["expected_hit"], -x["confirm"]["level"],
+                            -x["confidence"], -x["abs_move"]))
+    for i, x in enumerate(out):
+        x["order"] = i + 1
     return out
 
 
