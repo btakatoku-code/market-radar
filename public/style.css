@@ -74,6 +74,8 @@ main{padding:14px 12px 8px;max-width:720px;margin:0 auto}
   border:1px solid rgba(255,182,72,.35);background:rgba(255,182,72,.09);
 }
 .banner.info{border-color:rgba(91,140,255,.35);background:rgba(91,140,255,.09)}
+.banner.warn{border-color:rgba(240,170,60,.45);background:rgba(240,170,60,.10)}
+.banner.warn strong{color:var(--warn)}
 .banner strong{display:block;margin-bottom:3px;font-size:13.5px}
 
 /* ---- 銘柄カード ---- */

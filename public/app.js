@@ -412,7 +412,7 @@ function itemCard(x, showRank, chartH) {
   return `<article class="item">
     <div class="item-head">${rank}
       <div class="item-title">
-        <span class="nm">${esc(x.name)}</span>
+        <span class="nm">${esc(x.name)}${x.required ? ' <span class="pill ok">指定</span>' : ''}</span>
         <span class="sub">${esc(x.code)} · ${esc(x.kind_label)}${x.note ? ' · ' + esc(x.note) : ''}</span>
       </div>
       <div class="item-fig">
@@ -668,6 +668,10 @@ function viewHome(d) {
 
   return `
   ${statusCard(d)}
+  ${(d.missing_required || []).length ? `<div class="banner warn">
+    <strong>表示できていない銘柄があります</strong>
+    ${d.missing_required.map(m => esc(m.name)).join('、')}のデータを取得できませんでした。
+    一時的な取得失敗の可能性があります。次の更新で戻らない場合は不具合です。</div>` : ''}
   <div class="banner"><strong>この数字の読み方</strong>
     大きく出している％は<b>売買コストを引いたあと</b>の値です。
     株・貴金属・暗号資産は${esc(d.horizon_long_label || '')}先、FXは${esc(d.horizon_fx_label || '')}先の予測。
@@ -712,12 +716,16 @@ function viewRank(d) {
   const g = groups[CAT];
   const chips = groups.map((c, i) =>
     `<button class="chip ${i === CAT ? 'on' : ''}" data-cat="${i}">${esc(c.label)}</button>`).join('');
-  const items = g.items.map(x => itemCard(x, !g.pinned, 130)).join('');
+  const items = g.items.length
+    ? g.items.map(x => itemCard(x, !g.pinned, 130)).join('')
+    : `<p class="empty">${esc(g.empty_note || 'この区分に表示できる銘柄がありません')}</p>`;
   const note = g.pinned
     ? `<div class="banner info"><strong>指定銘柄は常に表示します</strong>
         スコアや足切りの条件に関係なく、この5銘柄は毎回この順番で出します。</div>`
-    : `<div class="banner"><strong>この区分は固定しません</strong>
-        その日のスコア順です。条件を満たしたものだけが上位に入ります。</div>`;
+    : `<div class="banner"><strong>この区分はスコア順です</strong>
+        その日のスコア順に並べています。ただし<b>「指定」の付いた銘柄は
+        順位に関わらず必ず表示</b>します（暗号資産のBTC・ETH・XRP・SOL、
+        貴金属の金・銀・プラチナ）。</div>`;
   return `${note}<div class="chips">${chips}</div>${items}`;
 }
 

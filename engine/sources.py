@@ -173,6 +173,39 @@ def fetch_fear_greed(use_cache=True):
     return _cached("fng", _do, use_cache)
 
 
+# 暗号資産の取得元。Yahoo を主にする。
+#
+# もともと Binance を使っていたが、Binance は米国のIPアドレスを遮断しており、
+# GitHub Actions の実行環境（米国）からは毎回取得に失敗していた。手元（日本）
+# では成功するため、ローカルでは表示されるのにアプリでは暗号資産が丸ごと
+# 消えている状態が続いていた。
+#
+# 環境によって取得元が変わると手元での確認が当てにならなくなるので、
+# どこからでも使える Yahoo を主とし、Binance は予備に回す。
+# Yahoo の方が履歴も長い（BTC: 3653本 対 3000本）。
+CRYPTO_YAHOO = {
+    "BTCUSDT": "BTC-USD", "ETHUSDT": "ETH-USD", "XRPUSDT": "XRP-USD",
+    "SOLUSDT": "SOL-USD", "BNBUSDT": "BNB-USD", "ADAUSDT": "ADA-USD",
+    "DOGEUSDT": "DOGE-USD", "LINKUSDT": "LINK-USD", "AVAXUSDT": "AVAX-USD",
+}
+
+
+def fetch_crypto(symbol, use_cache=True):
+    """暗号資産を取得する。Yahoo を試し、駄目なら Binance に回す。"""
+    ysym = CRYPTO_YAHOO.get(symbol)
+    if ysym:
+        try:
+            bars = fetch_yahoo(ysym, use_cache=use_cache)
+            if bars and bars.get("c"):
+                return bars
+        except Exception:
+            pass
+    try:
+        return fetch_binance(symbol, use_cache=use_cache)
+    except Exception:
+        return None
+
+
 def fetch_many(specs, workers=6, use_cache=True, progress=True):
     """複数銘柄を並列取得。
 
@@ -184,7 +217,7 @@ def fetch_many(specs, workers=6, use_cache=True, progress=True):
 
     def one(spec):
         key, kind, sym = spec
-        bars = (fetch_binance(sym, use_cache=use_cache) if kind == "binance"
+        bars = (fetch_crypto(sym, use_cache=use_cache) if kind == "binance"
                 else fetch_yahoo(sym, use_cache=use_cache))
         done[0] += 1
         if progress and done[0] % 25 == 0:

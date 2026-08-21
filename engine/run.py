@@ -377,10 +377,40 @@ def build(use_cache=False, verbose=True):
         pool = [x for x in scored if x[0]["kind"] == kind]
         if kind in ("us_stock", "jp_stock", "us_etf", "jp_etf"):
             pool = [x for x in pool if x[0]["adv"] >= config.MIN_DOLLAR_VOLUME]
+        # 必須銘柄は順位に関わらず必ず入れる。スコアだけで切ると、
+        # ビットコインのように指定した銘柄が押し出されることがある。
+        req_keys = {k for k, _ in config.REQUIRED_ASSETS}
+        head = pool[:count + 4]
+        for x in pool:
+            if x[0]["key"] in req_keys and x not in head:
+                head.append(x)
+        ref = refine(head, len(head))
+        must = [x for x in ref if x[0]["key"] in req_keys]
+        rest = [x for x in ref if x[0]["key"] not in req_keys]
+        chosen = must + rest[:max(0, count - len(must))]
+        chosen.sort(key=lambda x: -scoring.total_score(x[2], x[1]))
         items = [make(a, fc, comp, rank=i + 1, chart_bars=90)
-                 for i, (a, fc, comp) in enumerate(refine(pool, count + 4)[:count])]
-        if items:
-            categories.append({"kind": kind, "label": label, "items": items})
+                 for i, (a, fc, comp) in enumerate(chosen)]
+        for it in items:
+            if it["key"] in req_keys:
+                it["required"] = True
+        # 中身が空でも区分自体は残す。黙って消えると、欠けていることに
+        # 気づけないため（暗号資産がまさにその状態になっていた）。
+        categories.append({"kind": kind, "label": label, "items": items,
+                           "empty_note": ("データを取得できなかったため表示できていません。"
+                                          if not items else None)})
+
+    # ---- 必須銘柄が揃っているかの確認 ----
+    shown = set()
+    for cat in categories:
+        shown.update(i["key"] for i in cat["items"])
+    shown.update(i["key"] for i in pinned)
+    shown.update(i["key"] for i in top5)
+    missing_required = [{"key": k, "name": n} for k, n in config.REQUIRED_ASSETS
+                        if k not in shown]
+    if verbose and missing_required:
+        print("   !! 必須銘柄が欠けています: "
+              + ", ".join(m["name"] for m in missing_required))
 
     # ---- FX ----
     if verbose:
@@ -503,6 +533,7 @@ def build(use_cache=False, verbose=True):
         "next_update": "2時間ごと（日本時間の偶数時）",
         "update_hours": config.UPDATE_HOURS_JST,
         "top5": top5, "pinned": pinned, "categories": categories,
+        "missing_required": missing_required,
         "diversification": diversification,
         "fx": {"signals": fx_signals, "plan": fx_plan},
         "context": context, "regime": snap,
