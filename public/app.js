@@ -293,10 +293,12 @@ function bindTradingView() {
 }
 
 
-/* ---------- タイミング判定 ----------
-   曜日と経済指標の有無で的中率が変わることが検証で確認できた。
-   基準57.0%に対し、月水かつその通貨の指標がある日は64.2%。
-   前半・後半のどちらでも成立したので、除外はせず条件の良さとして示す。 */
+/* ---------- タイミング表示 ----------
+   曜日と経済指標による絞り込みは、いったん採用したが取り下げた。
+   前半・後半に割る検査は通ったのに、検証期間を前後にずらすと効果が
+   消えたため（56.2/57.8/54.6% 対 基準55.6/55.5/54.4%）。
+   いまは的中率の主張を伴わず、「明日この通貨の指標がある」という
+   事実だけを表示している。 */
 function timingBlock(t) {
   if (!t) return '';
   const ev = (t.events || []).length
@@ -635,7 +637,7 @@ function viewHome(d) {
 
   const stH = settings();
   const fxAll = ((d.fx && d.fx.signals) || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= stH.fxConf,
+    tradeable: x.confidence >= stH.fxConf && !(x.rate && x.rate.veto),
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
     || b.confidence - a.confidence);
@@ -646,7 +648,9 @@ function viewHome(d) {
         ${s.tradeable ? '' : '<span class="muted">見送り</span>'}</span>
       <span class="muted num">確信度 ${(s.confidence * 100).toFixed(0)}%
         / 実測${s.conf_stats && s.conf_stats.conf ? (s.conf_stats.hit * 100).toFixed(1) + '%' : '—'}
-        / 裏付け${s.confirm ? esc(s.confirm.label) : '—'}</span>
+        / 裏付け${s.confirm ? esc(s.confirm.label) : '—'}
+        ${s.rate && (s.rate.state === 'tailwind' || s.rate.veto)
+      ? `/ <span class="${s.rate.veto ? 'down' : 'up'}">${esc(s.rate.label)}</span>` : ''}</span>
     </div>`).join('');
 
   const dv = d.diversification;
@@ -842,8 +846,9 @@ function viewFx(d) {
   const barCol = ratio < 30 ? 'var(--down)' : ratio < 80 ? 'var(--warn)' : 'var(--up)';
   const m = base.measured || {};
   const all = (d.fx.signals || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= st.fxConf,
-    status: x.confidence >= st.fxConf ? 'シグナルあり' : '見送り',
+    tradeable: x.confidence >= st.fxConf && !(x.rate && x.rate.veto),
+    status: (x.rate && x.rate.veto) ? '見送り（金利が逆風）'
+      : (x.confidence >= st.fxConf ? 'シグナルあり' : '見送り'),
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
     || b.confidence - a.confidence);
@@ -902,9 +907,15 @@ function viewFx(d) {
       ? `<span class="pill ${s.conf_stats.hit >= 0.58 ? 'ok' : 'wa'}">この区分の実測 ${(s.conf_stats.hit * 100).toFixed(1)}%</span>`
       : '<span class="pill">実測区分に届かず</span>'}
         ${hitBadge(s.hit_rate, s.hit_n, s.hit_gain, BASE_FX)}
+        ${s.rate && s.rate.state !== 'unknown'
+      ? `<span class="pill ${s.rate.state === 'tailwind' ? 'ok' : s.rate.veto ? 'no' : ''}">${esc(s.rate.label)}${
+        s.rate.hit != null ? ' ' + (s.rate.hit * 100).toFixed(1) + '%' : ''}</span>` : ''}
       </div>
-      ${on ? '' : `<p class="muted" style="margin:8px 0 0">確信度が${(st.fxConf * 100).toFixed(0)}%に届いていません。
-        検証ではこの水準未満に優位性が確認できなかったため、参考表示です。</p>`}
+      ${s.rate && s.rate.note ? `<p class="muted" style="margin:8px 0 0">${esc(s.rate.note)}${
+        s.rate.veto ? ` 期間3通りで${s.rate.windows.map(w => (w * 100).toFixed(1)).join('/')}%、
+        条件作りに使っていない8ペアでも36%前後です。見送りを推奨します。` : ''}${
+        s.rate.state === 'tailwind' && s.rate.hit != null
+          ? ` 実測${(s.rate.hit * 100).toFixed(1)}%。` : ''}</p>` : ''}
       ${chartSVG(s.chart, 140)}
       ${macdChart(s.ind_chart)}
       ${rsiChart(s.ind_chart)}
@@ -945,9 +956,12 @@ function viewFx(d) {
       ${d.econ ? `<div class="row"><span class="muted">${esc(d.econ.next_date)}の重要指標</span>
         <span class="num">${d.econ.next.high_count} 件
           <span class="muted">${esc((d.econ.next.currencies || []).join(' '))}</span></span></div>` : ''}
-      <div class="row"><span class="muted">好条件の日の実測的中率</span>
-        <span class="num up">${((d.fx_timing && d.fx_timing.prime_hit || 0.642) * 100).toFixed(1)}%
-          <span class="muted">基準 ${((d.fx_timing && d.fx_timing.base_hit || 0.57) * 100).toFixed(1)}%</span></span></div>
+      ${d.fx_rate_after_veto ? `<div class="row"><span class="muted">金利の逆風を除いた実測的中率</span>
+        <span class="num up">${(d.fx_rate_after_veto.hit * 100).toFixed(1)}%
+          <span class="muted">除く前 ${(d.fx_rate_after_veto.before * 100).toFixed(1)}%</span></span></div>` : ''}
+      ${d.us_yield ? `<div class="row"><span class="muted">米10年国債利回り</span>
+        <span class="num">${num(d.us_yield.value, 2)}%
+          <span class="${d.us_yield.chg20 >= 0 ? 'up' : 'down'}">20日で${d.us_yield.chg20 >= 0 ? '+' : ''}${num(d.us_yield.chg20, 2)}%</span></span></div>` : ''}
       <p class="muted" style="margin:8px 0 0">5ペアは毎日すべて表示し、
         <b>的中確率の高い順 → 裏付けの強い順</b>で並べています。
         確信度の下限は資金設定で変更できます。</p>
@@ -1074,6 +1088,29 @@ function viewAcc(d) {
     </div>`).join('')}
     <p class="muted" style="margin-top:4px">${esc(v.rejected_data.note)}</p></div>` : '';
 
+  // 米国金利による見送り判定。採用した数少ない追加。
+  const rt = v.rates;
+  const w3r = r => `<td class="num ${r.w400 >= 0.55 ? 'up' : r.w400 < 0.50 ? 'down' : ''}">${(r.w400 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.w360 * 100).toFixed(1)}%</td><td class="num">${(r.w440 * 100).toFixed(1)}%</td>`;
+  const rateCard = rt ? `<div class="card"><h2>${esc(rt.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(rt.summary)}</p>
+    <div class="scroll-x"><table class="tbl">
+    <tr><th>条件</th><th>400時点</th><th>360時点</th><th>440時点</th><th>1日の回数</th><th>1日の期待値</th></tr>
+    ${rt.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
+      ${w3r(r)}<td class="num">${num(r.per_day, 2)}回</td>
+      <td class="num ${cls(r.daily)}">${pct(r.daily)}</td></tr>`).join('')}
+    </table></div>
+    <p class="muted" style="margin-top:8px">${esc(rt.held_out_note)}</p>
+    <h3 style="margin:14px 0 6px">${esc(rt.bands.title)}</h3>
+    <div class="scroll-x"><table class="tbl">
+    <tr><th>金利変化の大きさ</th><th>追い風（400/360/440）</th><th>逆風（400/360/440）</th></tr>
+    ${rt.bands.rows.map(r => `<tr><td>${esc(r.band)}</td>
+      <td class="num up">${r.with.map(x => (x * 100).toFixed(1)).join(' / ')}%</td>
+      <td class="num ${r.without[0] < 0.50 ? 'down' : ''}">${r.without.map(x => (x * 100).toFixed(1)).join(' / ')}%</td></tr>`).join('')}
+    </table></div>
+    <p class="muted" style="margin-top:8px">${esc(rt.bands.note)}</p>
+    <p class="muted" style="margin-top:8px">${esc(rt.note)}</p></div>` : '';
+
   const rules = T(v.stocks.title, 't値が2以上で統計的に有意。どのルールも頑健性検査を通りませんでした。',
     '<th>並べ替えルール</th><th>市場超過</th><th>t値</th>',
     v.stocks.rules.map(r => `<tr><td>${esc(r.name)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ''}</td>
@@ -1153,7 +1190,7 @@ function viewAcc(d) {
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
     ${v.costs ? esc(v.costs.summary) : ''}</div>
-  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${tim}${ind}${rej}${tv}
+  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${rateCard}${tim}${ind}${rej}${tv}
   <div class="card"><h2>検証方法と注意点</h2>
     <p style="font-size:13px">${esc(v.method)}</p>
     <p class="muted">${esc(v.data_note)}</p>

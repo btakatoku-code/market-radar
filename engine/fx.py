@@ -9,6 +9,7 @@
 将来も同じ優位性が続く保証はない。
 """
 import math
+import time
 
 import analog
 import config
@@ -70,6 +71,86 @@ TIMING_RETRACTED = {
 def confidence_stats(conf):
     """指定した確信度に最も近い実測値を返す（設定画面の表示用）"""
     return min(CONFIDENCE_LEVELS, key=lambda x: abs(x["conf"] - conf))
+
+
+# 米国金利による判定の実測（主要5ペア・確信度56%以上・前日の金利のみ使用）。
+#
+# 分かったこと: 金利が大きく動いているとき、予測がその向きに逆らっていると当たらない。
+#   主要5ペア  45.7 / 45.2 / 48.0%（400/360/440時点）
+#   残り8ペア  36.2 / 35.4 / 36.1%（条件作りに使っていない試し打ち）
+# どちらも1回あたりの損益がマイナスで、実際に損をする取引だった。
+# これを見送りにすると全体の勝率が 58.0→60.0% に上がり、
+# シグナルが減っても1日あたりの期待値は 0.079→0.083% と落ちない。
+#
+# 「当たるものを新しく主張する」のではなく「外れるものを外す」使い方なので、
+# 主張の強さとしても安全側にある。
+RATE_BIG_MOVE = 0.27        # 20日変化がこれ以上なら「大きく動いた」（上位1/3の境目）
+
+RATE_VETO = {"hit": 0.457, "windows": [0.457, 0.452, 0.480], "n": 46,
+             "held_out": [0.362, 0.354, 0.361],
+             "label": "金利が強い逆風"}
+RATE_AFTER_VETO = {"hit": 0.600, "windows": [0.600, 0.589, 0.593], "n": 285,
+                   "per_day": 0.71, "daily": 0.00083,
+                   "before": 0.580, "before_windows": [0.580, 0.570, 0.579]}
+RATE_HELD_OUT = {"pairs": 8, "before": [0.544, 0.548, 0.530],
+                 "after": [0.574, 0.578, 0.554],
+                 "note": "条件作りに使っていない8ペアでも同じ改善を確認"}
+
+# 追い風・逆風それぞれの実測（大きさを問わない符号だけの判定）。
+# 60%区分は件数45件で期間ごとに逆転したため、そこでは区別しない。
+RATE_LEVELS = {
+    0.53: {"with":    {"hit": 0.538, "n": 426, "windows": [0.538, 0.542, 0.539]},
+           "without": {"hit": 0.508, "n": 427, "windows": [0.508, 0.495, 0.516]}},
+    0.56: {"with":    {"hit": 0.617, "n": 175, "windows": [0.617, 0.609, 0.595]},
+           "without": {"hit": 0.538, "n": 156, "windows": [0.538, 0.528, 0.558]}},
+}
+RATE_UNRELIABLE_ABOVE = 0.60   # これ以上の確信度では金利で区別しない
+
+
+def rate_backing(conf, tailwind, direction):
+    """金利がその予測を後押ししているか、逆らっているかを判定する。
+
+    帯域別の実測では、効果は「金利が大きく動いたとき」に集中していた。
+    小さい変化のときは追い風と逆風でほとんど差がない（57.7% 対 54.5%）ため、
+    そこでは判定を出さない。誤差の符号を読んでも意味がない。
+
+    返り値の state:
+      tailwind        大きく動いていて、予測と同じ向き
+      headwind_strong 大きく動いていて、予測と逆向き → 見送り
+      flat            金利がほとんど動いていない（判定材料にしない）
+      unknown         金利データがない
+    """
+    if tailwind is None:
+        return {"state": "unknown", "label": "金利データなし", "hit": None,
+                "tailwind": None, "veto": False}
+    if abs(tailwind) < RATE_BIG_MOVE:
+        return {"state": "flat", "label": "金利はほぼ横ばい", "hit": None,
+                "tailwind": tailwind, "veto": False,
+                "note": ("20日の変化が{:+.2f}%と小さく、判定材料にしていません。"
+                         "実測でも、この範囲では追い風と逆風で差が出ませんでした。"
+                         ).format(tailwind)}
+    agree = (tailwind > 0) == (direction > 0)
+    if not agree:
+        return {"state": "headwind_strong", "label": RATE_VETO["label"],
+                "hit": RATE_VETO["hit"], "windows": RATE_VETO["windows"],
+                "n": RATE_VETO["n"], "tailwind": tailwind, "veto": True,
+                "note": ("金利が20日で{:+.2f}%動いていて、予測はその向きに逆らっています。"
+                         "実測45.7%で、1回あたりの損益もマイナスでした。"
+                         ).format(tailwind)}
+    lv = None
+    if conf < RATE_UNRELIABLE_ABOVE:
+        for th in sorted(RATE_LEVELS, reverse=True):
+            if conf >= th:
+                lv = RATE_LEVELS[th]
+                break
+    st = lv["with"] if lv else None
+    return {"state": "tailwind", "label": "金利の追い風あり",
+            "hit": st["hit"] if st else None,
+            "windows": st["windows"] if st else None,
+            "n": st["n"] if st else None,
+            "tailwind": tailwind, "veto": False,
+            "note": ("金利が20日で{:+.2f}%動いていて、予測と同じ向きです。"
+                     ).format(tailwind)}
 
 
 def confidence_stats_for(conf):
@@ -166,7 +247,8 @@ def confirmation(direction, comp):
     }
 
 
-def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None):
+def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None,
+            rate_series=None, at_ts=None):
     """各通貨ペアの予測を作り、確信度の高い順に並べる。
 
     プールは渡された全ペアで作るが、シグナルとして出すのは pairs のみ。
@@ -233,7 +315,8 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None):
     # 検証で優位性が確認できたのは確信度56%以上のときだけなので、
     # それ未満は tradeable=False として区別する。
     #
-    # 並び順は「的中確率の高い順 → 裏付けの強い順」。
+    # 並び順は「的中確率の高い順 → 裏付けの強い順」。的中確率には
+    # 金利の追い風の有無まで織り込む（56%区分なら追い風あり61.7%／なし53.8%）。
     # 的中確率は、その確信度が属する区分の実測勝率を使う（53%区分=52.3%、
     # 56%区分=58.0%、60%区分=62.8%）。同じ区分の中では裏付けの強さで並べ、
     # それも同じなら確信度そのもので並べる。
@@ -241,11 +324,23 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None):
     # なお「14ペアから的中確率の高い上位5つを毎日選び直す」方式も実測したが、
     # 勝率が58.0%→56.4%（検証期間3通りすべて）と下がったため採用していない。
     # 主要5ペア自体の成績が良く、入れ替えると質の劣るペアが混ざるため。
+    import rates as rates_mod
+    if at_ts is None:
+        at_ts = int(time.time())
     for x in out:
-        x["tradeable"] = x["confidence"] >= config.FX_MIN_CONFIDENCE
-        x["status"] = "シグナルあり" if x["tradeable"] else "見送り"
         x["conf_stats"] = confidence_stats_for(x["confidence"])
-        x["expected_hit"] = x["conf_stats"]["hit"]
+        tw = (rates_mod.tailwind(rate_series, x["key"], at_ts)
+              if rate_series else None)
+        x["rate"] = rate_backing(x["confidence"], tw,
+                                 1 if x["direction"] == "買い" else -1)
+        # 確信度が足りていても、金利が強い逆風なら見送る（実測45.7%）。
+        x["tradeable"] = (x["confidence"] >= config.FX_MIN_CONFIDENCE
+                          and not x["rate"]["veto"])
+        x["status"] = ("シグナルあり" if x["tradeable"]
+                       else ("見送り（金利が逆風）" if x["rate"]["veto"] else "見送り"))
+        # 金利の裏付けまで実測できている場合は、そちらの方が細かい区分なので優先する。
+        x["expected_hit"] = (x["rate"]["hit"] if x["rate"]["hit"] is not None
+                             else x["conf_stats"]["hit"])
     out.sort(key=lambda x: (-x["expected_hit"], -x["confirm"]["level"],
                             -x["confidence"], -x["abs_move"]))
     for i, x in enumerate(out):

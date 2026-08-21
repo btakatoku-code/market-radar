@@ -21,6 +21,7 @@ import costs
 import dataset
 import events
 import fx as fxmod
+import rates as ratesmod
 import market
 import risk
 import scoring
@@ -385,7 +386,8 @@ def build(use_cache=False, verbose=True):
     if verbose:
         print("5) FXの分析")
     pool_fx = analog.build_pool(fx_assets, config.HORIZON_FX)
-    fx_signals = fxmod.signals(fx_assets, pool_fx)
+    rate_series = ratesmod.load()
+    fx_signals = fxmod.signals(fx_assets, pool_fx, rate_series=rate_series)
     fx_plan = fxmod.plan()
     fx_plan["lines"] = fxmod.summary_lines(fx_plan)
     fx_by_key = {a["key"]: a for a in fx_assets}
@@ -531,6 +533,14 @@ def build(use_cache=False, verbose=True):
         "fx_pool_pairs": len(fx_assets),
         "fx_confirmed": fxmod.CONFIRMED,
         "fx_levels": fxmod.CONFIDENCE_LEVELS,
+        "fx_rate_levels": fxmod.RATE_LEVELS,
+        "fx_rate_veto": fxmod.RATE_VETO,
+        "fx_rate_after_veto": fxmod.RATE_AFTER_VETO,
+        "fx_rate_big_move": fxmod.RATE_BIG_MOVE,
+        "fx_rate_held_out": fxmod.RATE_HELD_OUT,
+        "us_yield": ({"value": rate_series[-1]["y"],
+                      "chg20": ratesmod.at(rate_series, int(time.time()))["chg20"]}
+                     if rate_series and ratesmod.at(rate_series, int(time.time())) else None),
         "fx_timing_retracted": fxmod.TIMING_RETRACTED,
         "econ": {"today": econ_today, "next": econ_next,
                  "next_date": resolve_d.isoformat()},
