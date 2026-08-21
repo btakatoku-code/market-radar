@@ -1,9 +1,9 @@
 // アプリの外枠はキャッシュから即座に表示しつつ、裏で新しい版を取りに行く
 // （stale-while-revalidate）。次に開いたときには更新が反映される。
 // データは常に取りに行き、通信できないときだけ最後に取得した内容を見せる。
-const SHELL = 'mr-shell-v27';
+const SHELL = 'mr-shell-v28';
 const DATA = 'mr-data-v1';
-const FILES = ['./', './index.html', './style.css?v=27', './app.js?v=27', './manifest.json'];
+const FILES = ['./', './index.html', './style.css?v=28', './app.js?v=28', './manifest.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

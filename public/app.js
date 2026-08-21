@@ -1065,6 +1065,15 @@ function viewAcc(d) {
       <p class="muted" style="margin-top:8px">${esc(oc.note)}</p>` : ''}
     </div>` : '';
 
+  // 試して効果が出なかった情報源。同じ道を二度調べないための記録。
+  const rej = v.rejected_data ? `<div class="card"><h2>${esc(v.rejected_data.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(v.rejected_data.summary)}</p>
+    ${v.rejected_data.rows.map(r => `<div style="margin-bottom:12px">
+      <div><b>${esc(r.name)}</b> <span class="pill">${esc(r.result)}</span></div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(r.detail)}</div>
+    </div>`).join('')}
+    <p class="muted" style="margin-top:4px">${esc(v.rejected_data.note)}</p></div>` : '';
+
   const rules = T(v.stocks.title, 't値が2以上で統計的に有意。どのルールも頑健性検査を通りませんでした。',
     '<th>並べ替えルール</th><th>市場超過</th><th>t値</th>',
     v.stocks.rules.map(r => `<tr><td>${esc(r.name)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ''}</td>
@@ -1144,7 +1153,7 @@ function viewAcc(d) {
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
     ${v.costs ? esc(v.costs.summary) : ''}</div>
-  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${tim}${ind}${tv}
+  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${tim}${ind}${rej}${tv}
   <div class="card"><h2>検証方法と注意点</h2>
     <p style="font-size:13px">${esc(v.method)}</p>
     <p class="muted">${esc(v.data_note)}</p>
