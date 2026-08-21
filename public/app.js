@@ -1041,6 +1041,30 @@ function viewAcc(d) {
       <td class="num">${(r.stock_hit * 100).toFixed(1)}%</td>
       <td class="num">${num(r.stock_t, 2)}</td></tr>`).join('')) : '';
 
+  // 期間をずらしても成立するかの検査。曜日の絞り込みはここで崩れて取り下げた。
+  const wc = v.regime && v.regime.window_check;
+  const oc = v.regime && v.regime.operating_check;
+  const w3 = r => `<td class="num ${r.w400 >= 0.53 ? 'up' : ''}">${(r.w400 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.w360 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.w440 * 100).toFixed(1)}%</td>`;
+  const regWin = wc ? `<div class="card"><h2>${esc(wc.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(wc.summary)}</p>
+    <div class="scroll-x"><table class="tbl">
+    <tr><th>絞り込み方</th><th>400時点</th><th>360時点</th><th>440時点</th><th>t値</th></tr>
+    ${wc.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
+      ${w3(r)}<td class="num">${num(r.t400, 2)}</td></tr>`).join('')}
+    </table></div>
+    <p class="muted" style="margin-top:8px">${esc(wc.note)}</p>
+    ${oc ? `<h3 style="margin:14px 0 6px">${esc(oc.title)}</h3>
+      <div class="scroll-x"><table class="tbl">
+      <tr><th>絞り込み方</th><th>400時点</th><th>360時点</th><th>440時点</th><th>1日の回数</th><th>1日の期待値</th></tr>
+      ${oc.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
+        ${w3(r)}<td class="num">${num(r.per_day, 2)}回</td>
+        <td class="num ${cls(r.daily)}">${pct(r.daily)}</td></tr>`).join('')}
+      </table></div>
+      <p class="muted" style="margin-top:8px">${esc(oc.note)}</p>` : ''}
+    </div>` : '';
+
   const rules = T(v.stocks.title, 't値が2以上で統計的に有意。どのルールも頑健性検査を通りませんでした。',
     '<th>並べ替えルール</th><th>市場超過</th><th>t値</th>',
     v.stocks.rules.map(r => `<tr><td>${esc(r.name)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ''}</td>
@@ -1120,7 +1144,7 @@ function viewAcc(d) {
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
     ${v.costs ? esc(v.costs.summary) : ''}</div>
-  ${costTbl}${reg}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${tim}${ind}${tv}
+  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${tim}${ind}${tv}
   <div class="card"><h2>検証方法と注意点</h2>
     <p style="font-size:13px">${esc(v.method)}</p>
     <p class="muted">${esc(v.data_note)}</p>
