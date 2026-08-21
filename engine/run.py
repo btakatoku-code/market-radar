@@ -407,11 +407,14 @@ def build(use_cache=False, verbose=True):
         # 予測が実現する日に、その通貨に関係する指標があるか
         pair_cur = set(fxmod.PAIR_CURRENCIES.get(s["key"], ()))
         own = sorted(pair_cur & set(econ_next["currencies"]))
-        s["timing"] = fxmod.timing_quality(resolve_d.weekday(), bool(own))
+        # 曜日は「予測を出す日」を使う（検証もその定義で行った）。
+        # 経済指標は「予測が実現する日」を見る。両者は1日ずれる。
+        s["timing"] = fxmod.timing_quality(today_d.weekday(), bool(own))
         s["timing"]["currencies"] = own
         s["timing"]["events"] = [e["name"] for e in (econ.get(resolve_d.isoformat()) or [])
                                  if e["high"] and e["currency"] in pair_cur][:5]
         s["timing"]["date"] = resolve_d.isoformat()
+        s["conf_stats"] = fxmod.confidence_stats(s["confidence"])
 
     # ---- 市場環境 ----
     context = []
@@ -527,7 +530,8 @@ def build(use_cache=False, verbose=True):
         "fx_signal_pairs": len(config.FX_SIGNAL_PAIRS),
         "fx_pool_pairs": len(fx_assets),
         "fx_confirmed": fxmod.CONFIRMED,
-        "fx_timing": fxmod.TIMING,
+        "fx_levels": fxmod.CONFIDENCE_LEVELS,
+        "fx_timing_retracted": fxmod.TIMING_RETRACTED,
         "econ": {"today": econ_today, "next": econ_next,
                  "next_date": resolve_d.isoformat()},
         "earnings_known": len(calendar),

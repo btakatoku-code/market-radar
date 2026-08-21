@@ -43,52 +43,34 @@ CONFIRMED = {
 }
 UNCONFIRMED_HIT = 0.571         # 裏付けを問わない場合
 
-# タイミングの実測（確信度56%以上のうち、曜日と経済指標で絞った場合）。
-# 前半・後半に割ってもどちらでも成立したため採用している。
-#   基準（全体）        57.0%（t 3.91・353日）
-#   月水かつ自通貨の指標  64.2%（t 4.86・126日／前半64.7% 後半63.6%）
-TIMING = {
-    "prime_days": (0, 2),        # 月曜・水曜
-    "prime_hit": 0.642,
-    "base_hit": 0.570,
-    "event_hit": 0.583,          # 自通貨の指標あり（曜日は問わない）
-    "no_event_hit": 0.536,
-    "weak_days": (4,),           # 金曜は51.7%と弱い
-    "weak_hit": 0.517,
-    "t_stat": 4.86,
-    "days": 126,
+# 確信度の閾値ごとの実測（主要5ペア）。検証期間を400/360/440時点と
+# ずらしても順位が変わらないことを確認している。
+CONFIDENCE_LEVELS = [
+    {"conf": 0.53, "hit": 0.523, "per_day": 2.13, "mean": 0.00035, "t": 1.20,
+     "windows": [0.523, 0.518, 0.528], "first": 0.511, "second": 0.535},
+    {"conf": 0.56, "hit": 0.580, "per_day": 0.83, "mean": 0.00096, "t": 2.37,
+     "windows": [0.580, 0.570, 0.579], "first": 0.542, "second": 0.614},
+    {"conf": 0.60, "hit": 0.628, "per_day": 0.23, "mean": 0.00202, "t": 3.04,
+     "windows": [0.628, 0.624, 0.605], "first": 0.532, "second": 0.723},
+]
+
+# 曜日と経済指標による絞り込みは、いったん採用したが取り下げた。
+# 前半・後半に割る検査は通ったのに、検証期間を前後にずらすと効果が消えたため。
+# 同じ失敗を繰り返さないよう、記録として残しておく。
+TIMING_RETRACTED = {
+    "claimed": 0.642,
+    "windows": [0.562, 0.578, 0.546],
+    "baseline_windows": [0.556, 0.555, 0.544],
+    "note": ("前半64.7%／後半63.6%と分割検査は通ったが、検証期間を400→360→440時点と"
+             "ずらすと56.2%→57.8%→54.6%となり、基準（55.6%→55.5%→54.4%）と"
+             "変わらなくなった。優位性の証拠としては不十分と判断して取り下げた。"),
 }
 
 
-def timing_quality(weekday, has_own_event):
-    """曜日と経済指標から、その日の条件の良さを判定する。
+def confidence_stats(conf):
+    """指定した確信度に最も近い実測値を返す"""
+    return min(CONFIDENCE_LEVELS, key=lambda x: abs(x["conf"] - conf))
 
-    検証では「月曜または水曜」かつ「その通貨に関係する指標がある日」で
-    的中率が57.0%→64.2%に上がった。前半・後半のどちらでも成立している。
-    ただし条件を満たす日は全体の36%しかない。
-    """
-    prime = weekday in TIMING["prime_days"] and has_own_event
-    weak = weekday in TIMING["weak_days"]
-    if prime:
-        level, label, hit = 2, "好条件", TIMING["prime_hit"]
-    elif weak:
-        level, label, hit = 0, "弱い曜日", TIMING["weak_hit"]
-    elif has_own_event:
-        level, label, hit = 1, "標準", TIMING["event_hit"]
-    else:
-        level, label, hit = 0, "指標なし", TIMING["no_event_hit"]
-    names = ["月", "火", "水", "木", "金", "土", "日"]
-    return {
-        "level": level, "label": label, "hit_rate": hit,
-        "weekday": names[weekday] if 0 <= weekday < 7 else "?",
-        "has_event": bool(has_own_event),
-        "prime": prime,
-        "reason": ("{}曜日で、この通貨に関係する経済指標がある日です".format(names[weekday])
-                   if prime else
-                   ("{}曜日は検証で的中率が低い日です".format(names[weekday]) if weak else
-                    ("この通貨に関係する経済指標がある日です" if has_own_event else
-                     "この通貨に関係する経済指標がない日です"))),
-    }
 
 # 主要通貨ペアの片道スプレッド目安（対価格比）。国内FX業者の標準的な水準。
 SPREAD = {
@@ -112,6 +94,25 @@ PAIR_CURRENCIES = {
     "XAUUSD=X": ("XAU", "USD"),
 }
 MAX_LEVERAGE = 25.0             # 国内FXの個人口座の上限
+
+
+def timing_quality(weekday, has_own_event):
+    """その日の状況を情報として返す。的中率の主張は伴わない。
+
+    曜日と経済指標で的中率が変わるかを実測し、いったんは採用したが、
+    検証期間をずらすと効果が消えたため取り下げた（TIMING_RETRACTED）。
+    いまは絞り込みにも重み付けにも使わず、「明日この通貨の指標がある」
+    という事実だけを伝える。
+    """
+    names = ["月", "火", "水", "木", "金", "土", "日"]
+    return {
+        "weekday": names[weekday] if 0 <= weekday < 7 else "?",
+        "has_event": bool(has_own_event),
+        "note": ("この通貨に関係する経済指標が予定されています。"
+                 "指標の前後は値動きが荒くなることがあります。"
+                 if has_own_event else
+                 "この通貨に関係する重要な経済指標の予定はありません。"),
+    }
 
 
 def confirmation(direction, comp):

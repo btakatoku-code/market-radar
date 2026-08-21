@@ -269,3 +269,7 @@ main{padding:14px 12px 8px;max-width:720px;margin:0 auto}
 .tv-link{margin:11px 0 0;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px}
 .tv-link a{color:var(--warn);font-weight:600;text-decoration:none}
 .tv-link .muted{display:block;font-size:11px;margin-top:2px}
+
+.set-grid select{background:var(--card2);border:1px solid var(--line);color:var(--tx);
+  border-radius:9px;padding:9px 8px;font-size:12.5px;font-weight:600;width:100%}
+.set-grid select:focus{outline:none;border-color:var(--accent)}

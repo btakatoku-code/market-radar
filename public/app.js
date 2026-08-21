@@ -56,6 +56,7 @@ function settings() {
     capital: fp.capital || 40000, target: fp.target || 10000,
     risk: fp.risk_per_trade || 0.02, trades: fp.trades_per_day || 1,
     stockCapital: sd.capital || 300000, stockRisk: sd.risk || 0.02,
+    fxConf: d.fx_min_confidence || 0.56,   // シグナルとみなす確信度の下限
     holdings: [],
   };
   try {
@@ -298,17 +299,15 @@ function bindTradingView() {
    前半・後半のどちらでも成立したので、除外はせず条件の良さとして示す。 */
 function timingBlock(t) {
   if (!t) return '';
-  const k = t.level === 2 ? 'ok' : t.level === 1 ? 'wa' : 'no';
   const ev = (t.events || []).length
     ? `<ul class="checks" style="grid-template-columns:1fr">${t.events.map(e =>
       `<li class="yes">・${esc(e)}</li>`).join('')}</ul>`
     : '';
   return `<div class="confirm"><div class="confirm-head">
-      <span class="pill ${k}">条件 ${esc(t.label)}</span>
-      <span class="muted">${esc(t.weekday)}曜 · ${t.has_event ? esc((t.currencies || []).join('/')) + 'の指標あり' : '指標なし'}</span>
-      <span class="muted num cf-hit">この条件の実測 ${(t.hit_rate * 100).toFixed(1)}%</span>
+      <span class="pill">${esc(t.weekday)}曜 · ${esc(t.date || '')}</span>
+      <span class="muted">${t.has_event ? esc((t.currencies || []).join('/')) + 'の指標あり' : '重要指標なし'}</span>
     </div>
-    <p class="muted" style="margin:7px 0 0;font-size:11.5px">${esc(t.reason)}</p>
+    <p class="muted" style="margin:7px 0 0;font-size:11.5px">${esc(t.note || '')}</p>
     ${ev}</div>`;
 }
 
@@ -630,7 +629,10 @@ function viewHome(d) {
     </div>`;
   };
 
-  const fxAll = (d.fx && d.fx.signals) || [];
+  const stH = settings();
+  const fxAll = ((d.fx && d.fx.signals) || []).map(x => Object.assign({}, x, {
+    tradeable: x.confidence >= stH.fxConf,
+  }));
   const fxTop = fxAll.map(s => `
     <div class="row mini ${s.tradeable ? '' : 'dim'}">
       <span>${esc(s.name)}
@@ -832,8 +834,13 @@ function viewFx(d) {
   const lines = planLines(p).map(l => '<p style="margin:0 0 7px">' + esc(l) + '</p>').join('');
   const barCol = ratio < 30 ? 'var(--down)' : ratio < 80 ? 'var(--warn)' : 'var(--up)';
   const m = base.measured || {};
-  const all = d.fx.signals || [];
+  const all = (d.fx.signals || []).map(x => Object.assign({}, x, {
+    tradeable: x.confidence >= st.fxConf,
+    status: x.confidence >= st.fxConf ? 'シグナルあり' : '見送り',
+  }));
   const nTrade = all.filter(x => x.tradeable).length;
+  const lv = (d.fx_levels || []).slice().sort((a, b) =>
+    Math.abs(a.conf - st.fxConf) - Math.abs(b.conf - st.fxConf))[0];
 
   const settingsCard = `<div class="card"><h2>資金設定</h2><div class="set-grid">
     <label>FX運用資金（円）<input id="s-cap" type="number" inputmode="numeric" min="1000" step="1000" value="${st.capital}"></label>
@@ -842,6 +849,8 @@ function viewFx(d) {
     <label>1日の取引回数<input id="s-trd" type="number" inputmode="numeric" min="1" max="20" step="1" value="${st.trades}"></label>
     <label>株の運用資金（円）<input id="s-scap" type="number" inputmode="numeric" min="1000" step="10000" value="${st.stockCapital}"></label>
     <label>株の1銘柄リスク（%）<input id="s-srisk" type="number" inputmode="decimal" min="0.1" max="20" step="0.1" value="${(st.stockRisk * 100).toFixed(1)}"></label>
+    <label>シグナルの確信度<select id="s-conf">${(d.fx_levels || []).map(l =>
+      `<option value="${l.conf}"${Math.abs(l.conf - st.fxConf) < 0.005 ? ' selected' : ''}>${(l.conf * 100).toFixed(0)}%以上（勝率${(l.hit * 100).toFixed(1)}%・1日${l.per_day.toFixed(2)}回）</option>`).join('')}</select></label>
     </div><p class="muted" style="margin-top:8px">この端末に保存され、株のポジションサイズ計算にも使われます。</p></div>`;
 
   const plan = `<div class="card"><h2>資金計画</h2>
@@ -877,7 +886,7 @@ function viewFx(d) {
         <span class="pill ${on ? 'ok' : 'wa'}">確信度 ${(s.confidence * 100).toFixed(0)}%</span>
         ${hitBadge(s.hit_rate, s.hit_n, s.hit_gain, BASE_FX)}
       </div>
-      ${on ? '' : `<p class="muted" style="margin:8px 0 0">確信度が${((d.fx_min_confidence || 0.56) * 100).toFixed(0)}%に届いていません。
+      ${on ? '' : `<p class="muted" style="margin:8px 0 0">確信度が${(st.fxConf * 100).toFixed(0)}%に届いていません。
         検証ではこの水準未満に優位性が確認できなかったため、参考表示です。</p>`}
       ${chartSVG(s.chart, 140)}
       ${macdChart(s.ind_chart)}
@@ -908,9 +917,10 @@ function viewFx(d) {
 
   return `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
     分析は${d.fx_pool_pairs || 14}ペアで行い、主要${d.fx_signal_pairs || 5}ペアを毎日表示します。
-    実測した優位性は<b>確信度${((d.fx_min_confidence || 0.56) * 100).toFixed(0)}%以上のときだけ</b>で、
-    その条件では方向的中率${((m.hit_rate || 0.586) * 100).toFixed(1)}%・1回あたり+${((m.edge_per_trade || 0.00121) * 100).toFixed(3)}%
-    （${m.days || 229}日・t値${m.t_stat || 3.89}）。それ未満のペアは参考表示です。</div>
+    いま選んでいる確信度${(st.fxConf * 100).toFixed(0)}%以上での実測は
+    <b>勝率${((lv ? lv.hit : 0.58) * 100).toFixed(1)}%・1回あたり${pct(lv ? lv.mean : 0.00096, 3)}</b>
+    （1日${(lv ? lv.per_day : 0.83).toFixed(2)}回・t値${(lv ? lv.t : 2.37).toFixed(2)}）。
+    それ未満のペアは参考表示です。スプレッドは未計上です。</div>
     ${settingsCard}${plan}
     <div class="card"><h2>主要5ペア（${esc(d.horizon_fx_label || '')}先）</h2>
       <div class="row"><span class="muted">売買条件を満たしているペア</span>
@@ -922,7 +932,21 @@ function viewFx(d) {
         <span class="num up">${((d.fx_timing && d.fx_timing.prime_hit || 0.642) * 100).toFixed(1)}%
           <span class="muted">基準 ${((d.fx_timing && d.fx_timing.base_hit || 0.57) * 100).toFixed(1)}%</span></span></div>
       <p class="muted" style="margin:8px 0 0">5ペアは毎日すべて表示します。
-        曜日と経済指標から「条件の良さ」も各ペアに出しています。</p></div>
+        確信度の下限は資金設定で変更できます。</p>
+      ${(d.fx_levels || []).length ? `<div class="scroll-x" style="margin-top:10px"><table class="tbl">
+        <tr><th>確信度</th><th>勝率</th><th>1日</th><th>1回あたり</th><th>期間をずらすと</th></tr>
+        ${d.fx_levels.map(l => `<tr>
+          <td>${(l.conf * 100).toFixed(0)}%以上${Math.abs(l.conf - st.fxConf) < 0.005 ? ' <span class="pill ok">選択中</span>' : ''}</td>
+          <td class="num ${l.hit >= 0.58 ? 'up' : ''}">${(l.hit * 100).toFixed(1)}%</td>
+          <td class="num">${l.per_day.toFixed(2)}回</td>
+          <td class="num">${pct(l.mean, 3)}</td>
+          <td class="num muted">${l.windows.map(w => (w * 100).toFixed(1)).join(' / ')}%</td></tr>`).join('')}
+      </table></div>
+      <p class="muted" style="margin-top:8px">確信度を上げるほど勝率は上がりますが、機会は減ります。
+        「期間をずらすと」は検証期間を400／360／440時点に変えたときの勝率で、
+        どの期間でも順位が変わらないことを確認しています。
+        ただし60%は前半53.2%／後半72.3%と偏りがあり、62.8%という数字自体の確からしさは
+        56%（前半54.2%／後半61.4%）より低い点に注意してください。</p>` : ''}</div>
     ${sigs || '<p class="empty">FXデータを取得できませんでした</p>'}`;
 }
 
@@ -1033,14 +1057,22 @@ function viewAcc(d) {
       <td class="num">${(r.first * 100).toFixed(1)}%</td><td class="num">${(r.second * 100).toFixed(1)}%</td>
       <td class="num ${cls(r.net)}">${pct(r.net, 3)}</td></tr>`).join('')) : '';
 
-  const tim = v.fx.timing ? T(v.fx.timing.title, v.fx.timing.summary + ' ' + v.fx.timing.note,
-    '<th>区分</th><th>的中率</th><th>t値</th><th>前半</th><th>後半</th><th>日数</th>',
-    v.fx.timing.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
-      <td class="num ${r.hit >= 0.6 ? 'up' : r.hit < 0.53 ? 'down' : ''}">${(r.hit * 100).toFixed(1)}%</td>
+  const cnf = v.fx.confidence ? T(v.fx.confidence.title,
+    v.fx.confidence.summary + ' ' + v.fx.confidence.note,
+    '<th>確信度</th><th>勝率</th><th>1日</th><th>t値</th><th>期間をずらすと</th><th>前半/後半</th>',
+    v.fx.confidence.rows.map(r => `<tr><td>${(r.conf * 100).toFixed(0)}%以上${r.adopted ? ' <span class="pill ok">既定</span>' : ''}</td>
+      <td class="num ${r.hit >= 0.58 ? 'up' : ''}">${(r.hit * 100).toFixed(1)}%</td>
+      <td class="num">${r.per_day.toFixed(2)}回</td>
       <td class="num">${num(r.t, 2)}</td>
-      <td class="num">${(r.first * 100).toFixed(1)}%</td>
-      <td class="num">${(r.second * 100).toFixed(1)}%</td>
-      <td class="num">${r.days}</td></tr>`).join('')) : '';
+      <td class="num muted">${r.windows.map(w => (w * 100).toFixed(1)).join(' / ')}</td>
+      <td class="num muted">${(r.first * 100).toFixed(1)} / ${(r.second * 100).toFixed(1)}</td></tr>`).join('')) : '';
+
+  const tim = v.fx.timing ? T(v.fx.timing.title, v.fx.timing.summary + ' ' + v.fx.timing.note,
+    '<th>区分</th><th>400時点</th><th>360時点</th><th>440時点</th>',
+    v.fx.timing.rows.map(r => `<tr><td>${esc(r.name)}</td>
+      <td class="num">${(r.w400 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.w360 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.w440 * 100).toFixed(1)}%</td></tr>`).join('')) : '';
 
   const tv = v.tradingview ? `<div class="card"><h2>${esc(v.tradingview.title)}</h2>
     <p style="font-size:13px;margin:0 0 8px">${esc(v.tradingview.summary)}</p>
@@ -1067,7 +1099,7 @@ function viewAcc(d) {
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
     ${v.costs ? esc(v.costs.summary) : ''}</div>
-  ${costTbl}${reg}${rules}${caps}${split}${fxr}${psel}${psplit}${tim}${ind}${tv}
+  ${costTbl}${reg}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${tim}${ind}${tv}
   <div class="card"><h2>検証方法と注意点</h2>
     <p style="font-size:13px">${esc(v.method)}</p>
     <p class="muted">${esc(v.data_note)}</p>
@@ -1105,6 +1137,13 @@ function bindSettings() {
     saveSettings(s);
     render();
   };
+  const cs = $('#s-conf');
+  if (cs) cs.addEventListener('change', () => {
+    const st2 = settings();
+    st2.fxConf = parseFloat(cs.value) || 0.56;
+    saveSettings(st2);
+    render();
+  });
   ['s-cap', 's-tgt', 's-risk', 's-trd', 's-scap', 's-srisk'].forEach(id => {
     const el = $('#' + id);
     if (el) el.addEventListener('change', apply);
