@@ -90,3 +90,5 @@
 {"date": "2026-08-21", "ts": 1787274005, "key": "BDX", "name": "ベクトン・ディッキンソン", "bucket": "category", "horizon": 21, "price": 187.62, "pred": 0.00860108287086344, "prob": 0.529297018770703, "rank": 3, "due": 1789952405, "actual": null}
 {"date": "2026-08-21", "ts": 1787274005, "key": "7832.T", "name": "バンダイナムコホールディングス", "bucket": "category", "horizon": 21, "price": 5557.0, "pred": 0.019707485518307373, "prob": 0.529297018770703, "rank": 2, "due": 1789952405, "actual": null}
 {"date": "2026-08-21", "ts": 1787274005, "key": "9104.T", "name": "商船三井", "bucket": "category", "horizon": 21, "price": 7126.0, "pred": 0.008727641583604161, "prob": 0.529297018770703, "rank": 3, "due": 1789952405, "actual": null}
+{"date": "2026-08-21", "ts": 1787284529, "key": "4689.T", "name": "LINEヤフー", "bucket": "top5", "horizon": 21, "price": 525.0, "pred": 0.01069992161609004, "prob": 0.5292710454645828, "rank": 5, "due": 1789962929, "actual": null}
+{"date": "2026-08-21", "ts": 1787284529, "key": "4689.T", "name": "LINEヤフー", "bucket": "category", "horizon": 21, "price": 525.0, "pred": 0.01069992161609004, "prob": 0.5292710454645828, "rank": 1, "due": 1789962929, "actual": null}
