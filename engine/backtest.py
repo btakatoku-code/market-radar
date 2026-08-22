@@ -30,10 +30,20 @@ def calendar(assets):
     return ref["bars"]["t"]
 
 
-def pick_dates(assets, horizon, n_dates, step, warmup=280):
+def pick_dates(assets, horizon, n_dates, step, warmup=280, offset=0):
+    """検証に使う時点を選ぶ。
+
+    最新日から step 営業日おきに遡る。offset は開始位置をずらす量で、
+    step=3 なら offset=0/1/2 の3通りは互いに1日も重ならない別々の標本になる。
+
+    新しい足が1本増えるだけで全時点が1日ずれるため、日をまたぐと結果が
+    変わりうる。offset を変えた検査は、その揺れの大きさを測るためのもの。
+    n_dates を 400/360/440 と変える検査では、時点の並び自体は共通なので
+    この揺れを検出できない。
+    """
     cal = calendar(assets)
     dates = []
-    p = len(cal) - horizon - 1
+    p = len(cal) - horizon - 1 - offset
     while len(dates) < n_dates and p > warmup:
         dates.append(cal[p])
         p -= step
@@ -42,7 +52,7 @@ def pick_dates(assets, horizon, n_dates, step, warmup=280):
 
 
 def collect(assets, horizon, n_dates=150, step=10, k=None,
-            use_knn=False, verbose=True, kinds=None):
+            use_knn=False, verbose=True, kinds=None, offset=0):
     """各時点・各銘柄の予測とスコア構成要素、実際の結果を集める。
 
     プールは時点を進めながら逐次追加するので、全期間を通して各バーは1回しか
@@ -58,7 +68,7 @@ def collect(assets, horizon, n_dates=150, step=10, k=None,
                     if a["kind"] in kinds and not a["leveraged"]
                     and a["bars_count"] >= config.MIN_BARS]
     by_key = {a["key"]: a for a in assets}
-    dates = pick_dates(assets, horizon, n_dates, step)
+    dates = pick_dates(assets, horizon, n_dates, step, offset=offset)
     if not dates:
         return []
     if verbose:

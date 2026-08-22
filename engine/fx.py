@@ -19,40 +19,60 @@ import config
 # 市場レジーム（リスク許容度×市場の広がり／9段階）で類似局面を絞ったうえで、
 # 確信度56%以上のシグナルだけを採用した場合の実測値。
 MEASURED = {
-    "hit_rate": 0.586,          # 方向的中率
-    "edge_per_trade": 0.00121,  # 1回あたりの平均損益（想定元本比）
-    "t_stat": 3.89,             # 日次集計のt値
-    "days": 229,                # シグナルが出た日数（検証400日中）
-    "signals": 326,
+    # 検証時点の並びを1日ずつずらした、互いに重ならない3標本の平均。
+    # 以前は1標本だけで測っており 58.6% としていたが、それは高すぎた。
+    "hit_rate": 0.567,          # 方向的中率（53.7 / 57.8 / 58.5% の平均）
+    "hit_by_offset": [0.537, 0.578, 0.585],
+    "hit_spread": 0.048,        # 標本による振れ幅
+    "edge_per_trade": 0.00088,  # 1回あたりの平均損益（想定元本比）
+    "t_stat": 2.52,             # 日次集計のt値
+    "signals": 327,             # 1標本あたりの平均シグナル数（検証400時点）
+    "signals_per_day": 0.82,
     "period": "2021-11 〜 2026-08",
     "regime": "risk_breadth9",
     "pairs": 5,
     "pool_pairs": 14,
-    # 検証400日のうちシグナルが出たのは229日。出た日は平均1.4回。
-    "signal_days": 229,
     "test_days": 400,
-    "signals_per_day": 0.82,     # 全日平均（シグナルが出ない日も含む）
-    "signals_per_active_day": 1.42,
+    "samples": 3,
+    # レジームを外すと勝率は 55.7% とほぼ同じだが、シグナルが59件（0.15回/日）
+    # まで減り、t値も1.00で有意でなくなる。レジームの役割は的中率を上げることでは
+    # なく、使える回数のシグナルを出すこと。
+    "no_regime": {"hit_rate": 0.557, "signals": 59, "signals_per_day": 0.15,
+                  "t_stat": 1.00, "by_offset": [0.566, 0.556, 0.548]},
 }
 
-# テクニカルの裏付けがあるシグナルの実測（14ペア・確信度56%以上での測定）
-CONFIRMED = {
-    "hit_rate": 0.591,          # MACDとトレンドが予測と同じ向き
-    "edge_per_trade": 0.00113,
-    "t_stat": 3.39,
-    "n": 340,
+# テクニカルの裏付けと的中率の関係は、確認できなかった。
+# 以前は「MACDとトレンドが揃うと59.1%」としていたが、時点の並びを
+# 変えた3標本で測ると、揃っている方が低かった（下は主要5ペア・確信度56%以上）。
+CONFIRM_MEASURED = {
+    "all":      {"hit": 0.567, "by_offset": [0.537, 0.578, 0.585], "n": 327},
+    "agree4":   {"hit": 0.540, "by_offset": [0.486, 0.566, 0.566], "n": 109},
+    "agree3up": {"hit": 0.559, "by_offset": [0.524, 0.585, 0.570], "n": 170},
+    "agree2dn": {"hit": 0.574, "by_offset": [0.552, 0.571, 0.600], "n": 156},
+    "note": "揃っている方がむしろ低い。絞り込みには使わない。",
 }
-UNCONFIRMED_HIT = 0.571         # 裏付けを問わない場合
+CONFIRMED = {"hit_rate": None, "retracted": True, "claimed": 0.591}
+UNCONFIRMED_HIT = None
 
-# 確信度の閾値ごとの実測（主要5ペア）。検証期間を400/360/440時点と
-# ずらしても順位が変わらないことを確認している。
+# 確信度の閾値ごとの実測（主要5ペア）。
+#
+# 検証時点の並びを1日ずつずらした、互いに重ならない3標本の平均。
+# 以前は1標本だけで測っており、56%区分を58.0%と表示していたが、
+# 3標本で測ると 53.7 / 57.8 / 58.5% で平均56.7%だった。
+#
+# 60%区分は振れ幅が11.4ポイントもあり、件数も80件しかない。
+# 62.8%という数字は運の要素が大きく、当てにできない（reliable=False）。
+# 1回あたりの損益とt値も3標本の平均。60%区分はt値1.39で有意ではない。
 CONFIDENCE_LEVELS = [
-    {"conf": 0.53, "hit": 0.523, "per_day": 2.13, "mean": 0.00035, "t": 1.20,
-     "windows": [0.523, 0.518, 0.528], "first": 0.511, "second": 0.535},
-    {"conf": 0.56, "hit": 0.580, "per_day": 0.83, "mean": 0.00096, "t": 2.37,
-     "windows": [0.580, 0.570, 0.579], "first": 0.542, "second": 0.614},
-    {"conf": 0.60, "hit": 0.628, "per_day": 0.23, "mean": 0.00202, "t": 3.04,
-     "windows": [0.628, 0.624, 0.605], "first": 0.532, "second": 0.723},
+    {"conf": 0.53, "hit": 0.539, "per_day": 2.11, "n": 843,
+     "mean": 0.00060, "t": 2.17,
+     "by_offset": [0.540, 0.523, 0.553], "spread": 0.030, "reliable": True},
+    {"conf": 0.56, "hit": 0.567, "per_day": 0.82, "n": 327,
+     "mean": 0.00088, "t": 2.52,
+     "by_offset": [0.537, 0.578, 0.585], "spread": 0.048, "reliable": True},
+    {"conf": 0.60, "hit": 0.558, "per_day": 0.20, "n": 80,
+     "mean": 0.00110, "t": 1.39,
+     "by_offset": [0.514, 0.628, 0.533], "spread": 0.114, "reliable": False},
 ]
 
 # 曜日と経済指標による絞り込みは、いったん採用したが取り下げた。
@@ -73,52 +93,41 @@ def confidence_stats(conf):
     return min(CONFIDENCE_LEVELS, key=lambda x: abs(x["conf"] - conf))
 
 
-# 米国金利による判定の実測（主要5ペア・確信度56%以上・前日の金利のみ使用）。
+# 米国金利による見送り判定は、いったん採用したが取り下げた。
 #
-# 分かったこと: 金利が大きく動いているとき、予測がその向きに逆らっていると当たらない。
-#   主要5ペア  45.7 / 45.2 / 48.0%（400/360/440時点）
-#   残り8ペア  36.2 / 35.4 / 36.1%（条件作りに使っていない試し打ち）
-# どちらも1回あたりの損益がマイナスで、実際に損をする取引だった。
-# これを見送りにすると全体の勝率が 58.0→60.0% に上がり、
-# シグナルが減っても1日あたりの期待値は 0.079→0.083% と落ちない。
+# 「金利が大きく動いていて予測が逆らうときは当たらない」という結果が出て、
+# 期間ずらし検査（400/360/440時点）も、条件作りに使っていない8ペアでの
+# 試し打ちも通った。しかし翌日に測り直すと再現しなかった。
 #
-# 「当たるものを新しく主張する」のではなく「外れるものを外す」使い方なので、
-# 主張の強さとしても安全側にある。
-RATE_BIG_MOVE = 0.27        # 20日変化がこれ以上なら「大きく動いた」（上位1/3の境目）
-
-RATE_VETO = {"hit": 0.457, "windows": [0.457, 0.452, 0.480], "n": 46,
-             "held_out": [0.362, 0.354, 0.361],
-             "label": "金利が強い逆風"}
-RATE_AFTER_VETO = {"hit": 0.600, "windows": [0.600, 0.589, 0.593], "n": 285,
-                   "per_day": 0.71, "daily": 0.00083,
-                   "before": 0.580, "before_windows": [0.580, 0.570, 0.579]}
-RATE_HELD_OUT = {"pairs": 8, "before": [0.544, 0.548, 0.530],
-                 "after": [0.574, 0.578, 0.554],
-                 "note": "条件作りに使っていない8ペアでも同じ改善を確認"}
-
-# 追い風・逆風それぞれの実測（大きさを問わない符号だけの判定）。
-# 60%区分は件数45件で期間ごとに逆転したため、そこでは区別しない。
-RATE_LEVELS = {
-    0.53: {"with":    {"hit": 0.538, "n": 426, "windows": [0.538, 0.542, 0.539]},
-           "without": {"hit": 0.508, "n": 427, "windows": [0.508, 0.495, 0.516]}},
-    0.56: {"with":    {"hit": 0.617, "n": 175, "windows": [0.617, 0.609, 0.595]},
-           "without": {"hit": 0.538, "n": 156, "windows": [0.538, 0.528, 0.558]}},
+# 原因は検証時点の選び方。pick_dates は最新日から3営業日おきに遡るため、
+# 新しい足が1本増えると400時点すべてが1日ずれ、まったく別の標本になる。
+# n_dates を 400/360/440 と変える検査は時点の並びを共有しているので、
+# この揺れを検出できなかった。
+#
+# 重ならない3標本で測ると、見送った分の勝率は 54.0 / 45.7 / 54.7% と
+# 9ポイントも振れる。負ける取引を外していたのではなく、たまたま
+# 負けが集まった標本を1つ見ていただけだった。
+RATE_RETRACTED = {
+    "claimed_veto_hit": 0.457,
+    "veto_hit_by_offset": [0.540, 0.457, 0.547],
+    "claimed_after": 0.600,
+    "after_by_offset": [0.536, 0.598, 0.592],
+    "base_by_offset": [0.537, 0.578, 0.585],
+    "gain_by_offset": [-0.001, 0.020, 0.007],
+    "note": ("時点の並びを1日ずらすと改善が消える標本がある。"
+             "曜日の条件と同じ形の失敗で、検査の穴が原因。"),
 }
-RATE_UNRELIABLE_ABOVE = 0.60   # これ以上の確信度では金利で区別しない
+
+# 金利は情報として表示するだけにする（的中率の主張は伴わない）。
+RATE_BIG_MOVE = 0.27
 
 
 def rate_backing(conf, tailwind, direction):
-    """金利がその予測を後押ししているか、逆らっているかを判定する。
+    """金利の向きを情報として返す。的中率の主張は伴わない。
 
-    帯域別の実測では、効果は「金利が大きく動いたとき」に集中していた。
-    小さい変化のときは追い風と逆風でほとんど差がない（57.7% 対 54.5%）ため、
-    そこでは判定を出さない。誤差の符号を読んでも意味がない。
-
-    返り値の state:
-      tailwind        大きく動いていて、予測と同じ向き
-      headwind_strong 大きく動いていて、予測と逆向き → 見送り
-      flat            金利がほとんど動いていない（判定材料にしない）
-      unknown         金利データがない
+    見送り判定に使っていたが、時点の並びを変えると効果が消えたため
+    取り下げた（RATE_RETRACTED）。いまは「金利がこう動いている」という
+    事実だけを伝える。
     """
     if tailwind is None:
         return {"state": "unknown", "label": "金利データなし", "hit": None,
@@ -126,31 +135,16 @@ def rate_backing(conf, tailwind, direction):
     if abs(tailwind) < RATE_BIG_MOVE:
         return {"state": "flat", "label": "金利はほぼ横ばい", "hit": None,
                 "tailwind": tailwind, "veto": False,
-                "note": ("20日の変化が{:+.2f}%と小さく、判定材料にしていません。"
-                         "実測でも、この範囲では追い風と逆風で差が出ませんでした。"
-                         ).format(tailwind)}
+                "note": "米10年国債利回りの20日変化は{:+.2f}%です。".format(tailwind)}
     agree = (tailwind > 0) == (direction > 0)
-    if not agree:
-        return {"state": "headwind_strong", "label": RATE_VETO["label"],
-                "hit": RATE_VETO["hit"], "windows": RATE_VETO["windows"],
-                "n": RATE_VETO["n"], "tailwind": tailwind, "veto": True,
-                "note": ("金利が20日で{:+.2f}%動いていて、予測はその向きに逆らっています。"
-                         "実測45.7%で、1回あたりの損益もマイナスでした。"
-                         ).format(tailwind)}
-    lv = None
-    if conf < RATE_UNRELIABLE_ABOVE:
-        for th in sorted(RATE_LEVELS, reverse=True):
-            if conf >= th:
-                lv = RATE_LEVELS[th]
-                break
-    st = lv["with"] if lv else None
-    return {"state": "tailwind", "label": "金利の追い風あり",
-            "hit": st["hit"] if st else None,
-            "windows": st["windows"] if st else None,
-            "n": st["n"] if st else None,
-            "tailwind": tailwind, "veto": False,
-            "note": ("金利が20日で{:+.2f}%動いていて、予測と同じ向きです。"
-                     ).format(tailwind)}
+    return {
+        "state": "tailwind" if agree else "headwind",
+        "label": "金利は同じ向き" if agree else "金利は逆向き",
+        "hit": None, "tailwind": tailwind, "veto": False,
+        "note": ("米10年国債利回りが20日で{:+.2f}%動いていて、"
+                 "この予測とは{}向きです。的中率との関係は確認できていません。"
+                 ).format(tailwind, "同じ" if agree else "逆"),
+    }
 
 
 def confidence_stats_for(conf):
@@ -211,11 +205,18 @@ def timing_quality(weekday, has_own_event):
 
 
 def confirmation(direction, comp):
-    """予測方向にテクニカルの裏付けがあるかを調べる。
+    """予測方向にテクニカルが同じ向きかを数える。的中率の主張は伴わない。
 
-    実測では、MACDヒストグラムとトレンドの両方が予測と同じ向きのとき
-    的中率が 57.1% → 59.1% に上がった。強制的に絞り込むと機会が3分の1に
-    減るため、除外はせず「裏付けの強さ」として表示するだけにする。
+    以前は「MACDとトレンドが揃うと 57.1% → 59.1% に上がる」としていたが、
+    時点の並びを変えた3標本で測り直すと逆だった。
+
+        裏付け4/4のみ  48.6 / 56.6 / 56.6%  平均54.0%
+        裏付け3/4以上  52.4 / 58.5 / 57.0%  平均55.9%
+        裏付け2/4以下  55.2 / 57.1 / 60.0%  平均57.4%
+        （全体 53.7 / 57.8 / 58.5%  平均56.7%）
+
+    揃っている方がむしろ低い。裏付けの強さで絞ると勝率は下がるため、
+    絞り込みには使わず、いくつ同じ向きかという事実だけを表示する。
     """
     up = direction > 0
     checks = [
@@ -243,7 +244,7 @@ def confirmation(direction, comp):
         "total": len(checks),
         "core": core,
         "items": [{"name": c[0], "ok": c[1], "text": c[2]} for c in checks],
-        "hit_rate": CONFIRMED["hit_rate"] if core else UNCONFIRMED_HIT,
+        "hit_rate": None,      # 的中率との関係は確認できなかった
     }
 
 
@@ -333,14 +334,9 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None,
               if rate_series else None)
         x["rate"] = rate_backing(x["confidence"], tw,
                                  1 if x["direction"] == "買い" else -1)
-        # 確信度が足りていても、金利が強い逆風なら見送る（実測45.7%）。
-        x["tradeable"] = (x["confidence"] >= config.FX_MIN_CONFIDENCE
-                          and not x["rate"]["veto"])
-        x["status"] = ("シグナルあり" if x["tradeable"]
-                       else ("見送り（金利が逆風）" if x["rate"]["veto"] else "見送り"))
-        # 金利の裏付けまで実測できている場合は、そちらの方が細かい区分なので優先する。
-        x["expected_hit"] = (x["rate"]["hit"] if x["rate"]["hit"] is not None
-                             else x["conf_stats"]["hit"])
+        x["tradeable"] = x["confidence"] >= config.FX_MIN_CONFIDENCE
+        x["status"] = "シグナルあり" if x["tradeable"] else "見送り"
+        x["expected_hit"] = x["conf_stats"]["hit"]
     out.sort(key=lambda x: (-x["expected_hit"], -x["confirm"]["level"],
                             -x["confidence"], -x["abs_move"]))
     for i, x in enumerate(out):

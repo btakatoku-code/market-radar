@@ -564,11 +564,8 @@ def build(use_cache=False, verbose=True):
         "fx_pool_pairs": len(fx_assets),
         "fx_confirmed": fxmod.CONFIRMED,
         "fx_levels": fxmod.CONFIDENCE_LEVELS,
-        "fx_rate_levels": fxmod.RATE_LEVELS,
-        "fx_rate_veto": fxmod.RATE_VETO,
-        "fx_rate_after_veto": fxmod.RATE_AFTER_VETO,
-        "fx_rate_big_move": fxmod.RATE_BIG_MOVE,
-        "fx_rate_held_out": fxmod.RATE_HELD_OUT,
+        "fx_rate_retracted": fxmod.RATE_RETRACTED,
+        "fx_confirm_measured": fxmod.CONFIRM_MEASURED,
         "us_yield": ({"value": rate_series[-1]["y"],
                       "chg20": ratesmod.at(rate_series, int(time.time()))["chg20"]}
                      if rate_series and ratesmod.at(rate_series, int(time.time())) else None),

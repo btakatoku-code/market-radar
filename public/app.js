@@ -205,12 +205,10 @@ function confirmBlock(c, tradeable) {
   const k = c.level === 2 ? 'ok' : c.level === 1 ? 'wa' : 'no';
   const items = (c.items || []).map(i =>
     `<li class="${i.ok ? 'yes' : 'no'}">${i.ok ? '✓' : '✕'} ${esc(i.text)}</li>`).join('');
-  const hit = tradeable
-    ? `<span class="muted num cf-hit">実測的中率 ${(c.hit_rate * 100).toFixed(1)}%</span>`
-    : '<span class="muted num cf-hit">見送りのため実測値の対象外</span>';
+  // 裏付けの強さと的中率に関係は見られなかったため、的中率は出さない。
   return `<div class="confirm"><div class="confirm-head">
-      <span class="pill ${k}">裏付け ${esc(c.label)}</span>
-      <span class="muted">${c.agree}/${c.total} 一致</span>${hit}
+      <span class="pill ${k}">テクニカル ${c.agree}/${c.total} 一致</span>
+      <span class="muted num cf-hit">的中率との関係は確認できず</span>
     </div><ul class="checks">${items}</ul></div>`;
 }
 
@@ -637,7 +635,7 @@ function viewHome(d) {
 
   const stH = settings();
   const fxAll = ((d.fx && d.fx.signals) || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= stH.fxConf && !(x.rate && x.rate.veto),
+    tradeable: x.confidence >= stH.fxConf,
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
     || b.confidence - a.confidence);
@@ -648,9 +646,8 @@ function viewHome(d) {
         ${s.tradeable ? '' : '<span class="muted">見送り</span>'}</span>
       <span class="muted num">確信度 ${(s.confidence * 100).toFixed(0)}%
         / 実測${s.conf_stats && s.conf_stats.conf ? (s.conf_stats.hit * 100).toFixed(1) + '%' : '—'}
-        / 裏付け${s.confirm ? esc(s.confirm.label) : '—'}
-        ${s.rate && (s.rate.state === 'tailwind' || s.rate.veto)
-      ? `/ <span class="${s.rate.veto ? 'down' : 'up'}">${esc(s.rate.label)}</span>` : ''}</span>
+        / テクニカル${s.confirm ? s.confirm.agree + '/' + s.confirm.total : '—'}
+</span>
     </div>`).join('');
 
   const dv = d.diversification;
@@ -854,9 +851,8 @@ function viewFx(d) {
   const barCol = ratio < 30 ? 'var(--down)' : ratio < 80 ? 'var(--warn)' : 'var(--up)';
   const m = base.measured || {};
   const all = (d.fx.signals || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= st.fxConf && !(x.rate && x.rate.veto),
-    status: (x.rate && x.rate.veto) ? '見送り（金利が逆風）'
-      : (x.confidence >= st.fxConf ? 'シグナルあり' : '見送り'),
+    tradeable: x.confidence >= st.fxConf,
+    status: x.confidence >= st.fxConf ? 'シグナルあり' : '見送り',
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
     || b.confidence - a.confidence);
@@ -916,14 +912,10 @@ function viewFx(d) {
       : '<span class="pill">実測区分に届かず</span>'}
         ${hitBadge(s.hit_rate, s.hit_n, s.hit_gain, BASE_FX)}
         ${s.rate && s.rate.state !== 'unknown'
-      ? `<span class="pill ${s.rate.state === 'tailwind' ? 'ok' : s.rate.veto ? 'no' : ''}">${esc(s.rate.label)}${
-        s.rate.hit != null ? ' ' + (s.rate.hit * 100).toFixed(1) + '%' : ''}</span>` : ''}
+      ? `<span class="pill">${esc(s.rate.label)}</span>` : ''}
       </div>
-      ${s.rate && s.rate.note ? `<p class="muted" style="margin:8px 0 0">${esc(s.rate.note)}${
-        s.rate.veto ? ` 期間3通りで${s.rate.windows.map(w => (w * 100).toFixed(1)).join('/')}%、
-        条件作りに使っていない8ペアでも36%前後です。見送りを推奨します。` : ''}${
-        s.rate.state === 'tailwind' && s.rate.hit != null
-          ? ` 実測${(s.rate.hit * 100).toFixed(1)}%。` : ''}</p>` : ''}
+      ${s.rate && s.rate.note
+      ? `<p class="muted" style="margin:8px 0 0">${esc(s.rate.note)}</p>` : ''}
       ${chartSVG(s.chart, 140)}
       ${macdChart(s.ind_chart)}
       ${rsiChart(s.ind_chart)}
@@ -954,8 +946,11 @@ function viewFx(d) {
   return `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
     分析は${d.fx_pool_pairs || 14}ペアで行い、主要${d.fx_signal_pairs || 5}ペアを毎日表示します。
     いま選んでいる確信度${(st.fxConf * 100).toFixed(0)}%以上での実測は
-    <b>勝率${((lv ? lv.hit : 0.58) * 100).toFixed(1)}%・1回あたり${pct(lv ? lv.mean : 0.00096, 3)}</b>
-    （1日${(lv ? lv.per_day : 0.83).toFixed(2)}回・t値${(lv ? lv.t : 2.37).toFixed(2)}）。
+    <b>勝率${lv ? (lv.hit * 100).toFixed(1) + '%' : '—'}</b>
+    （1日${lv ? lv.per_day.toFixed(2) : '—'}回・${lv && lv.n != null ? lv.n + '件' : '—'}）。
+    ${lv && lv.spread != null ? `これは検証時点の並びを1日ずつずらした3標本の平均で、
+    標本ごとの振れ幅は${(lv.spread * 100).toFixed(1)}ポイントです。` : ''}${
+    lv && lv.reliable === false ? '<b class="down">この区分は振れ幅が大きく、当てにできません。</b>' : ''}
     それ未満のペアは参考表示です。スプレッドは未計上です。</div>
     ${settingsCard}${plan}
     <div class="card"><h2>主要5ペア（${esc(d.horizon_fx_label || '')}先）</h2>
@@ -964,9 +959,7 @@ function viewFx(d) {
       ${d.econ ? `<div class="row"><span class="muted">${esc(d.econ.next_date)}の重要指標</span>
         <span class="num">${d.econ.next.high_count} 件
           <span class="muted">${esc((d.econ.next.currencies || []).join(' '))}</span></span></div>` : ''}
-      ${d.fx_rate_after_veto ? `<div class="row"><span class="muted">金利の逆風を除いた実測的中率</span>
-        <span class="num up">${(d.fx_rate_after_veto.hit * 100).toFixed(1)}%
-          <span class="muted">除く前 ${(d.fx_rate_after_veto.before * 100).toFixed(1)}%</span></span></div>` : ''}
+
       ${d.us_yield ? `<div class="row"><span class="muted">米10年国債利回り</span>
         <span class="num">${num(d.us_yield.value, 2)}%
           <span class="${d.us_yield.chg20 >= 0 ? 'up' : 'down'}">20日で${d.us_yield.chg20 >= 0 ? '+' : ''}${num(d.us_yield.chg20, 2)}%</span></span></div>` : ''}
@@ -977,19 +970,22 @@ function viewFx(d) {
         実測しましたが、勝率が58.0%→56.4%（検証期間3通りすべて）と下がったため採用していません。
         主要5ペア自体の成績が良く、入れ替えると質の劣るペアが混ざるためです。</p>
       ${(d.fx_levels || []).length ? `<div class="scroll-x" style="margin-top:10px"><table class="tbl">
-        <tr><th>確信度</th><th>勝率</th><th>1日</th><th>1回あたり</th><th>期間をずらすと</th></tr>
+        <tr><th>確信度</th><th>勝率(平均)</th><th>1日</th><th>件数</th><th>並びをずらすと</th></tr>
         ${d.fx_levels.map(l => `<tr>
           <td>${(l.conf * 100).toFixed(0)}%以上${Math.abs(l.conf - st.fxConf) < 0.005 ? ' <span class="pill ok">選択中</span>' : ''}</td>
-          <td class="num ${l.hit >= 0.58 ? 'up' : ''}">${(l.hit * 100).toFixed(1)}%</td>
+          <td class="num ${l.reliable === false ? 'down' : (l.hit >= 0.56 ? 'up' : '')}">${(l.hit * 100).toFixed(1)}%${
+        l.reliable === false ? ' <span class="muted">当てにできず</span>' : ''}</td>
           <td class="num">${l.per_day.toFixed(2)}回</td>
-          <td class="num">${pct(l.mean, 3)}</td>
-          <td class="num muted">${l.windows.map(w => (w * 100).toFixed(1)).join(' / ')}%</td></tr>`).join('')}
+          <td class="num">${l.n != null ? l.n + '件' : '—'}</td>
+          <td class="num muted">${(l.by_offset || l.windows || []).map(w => (w * 100).toFixed(1)).join(' / ')}%
+            ${l.spread != null ? `<span class="${l.spread >= 0.06 ? 'down' : ''}">±${(l.spread * 100).toFixed(1)}pt</span>` : ''}</td></tr>`).join('')}
       </table></div>
-      <p class="muted" style="margin-top:8px">確信度を上げるほど勝率は上がりますが、機会は減ります。
-        「期間をずらすと」は検証期間を400／360／440時点に変えたときの勝率で、
-        どの期間でも順位が変わらないことを確認しています。
-        ただし60%は前半53.2%／後半72.3%と偏りがあり、62.8%という数字自体の確からしさは
-        56%（前半54.2%／後半61.4%）より低い点に注意してください。</p>` : ''}</div>
+      <p class="muted" style="margin-top:8px">確信度を上げるほど機会は減ります。
+        「並びをずらすと」は検証時点の並びを1日ずつずらした3標本それぞれの勝率で、
+        これらは互いに1日も重ならない別々の標本です。
+        振れ幅が大きいほど、その数字は運に左右されます。
+        <b>60%区分は振れ幅11.4ポイント・80件しかなく、当てにできません。</b>
+        確信度を上げれば勝てる、とは言えない状態です。</p>` : ''}</div>
     ${sigs || '<p class="empty">FXデータを取得できませんでした</p>'}`;
 }
 
@@ -1065,26 +1061,22 @@ function viewAcc(d) {
 
   // 期間をずらしても成立するかの検査。曜日の絞り込みはここで崩れて取り下げた。
   const wc = v.regime && v.regime.window_check;
-  const oc = v.regime && v.regime.operating_check;
   const w3 = r => `<td class="num ${r.w400 >= 0.53 ? 'up' : ''}">${(r.w400 * 100).toFixed(1)}%</td>
       <td class="num">${(r.w360 * 100).toFixed(1)}%</td>
       <td class="num">${(r.w440 * 100).toFixed(1)}%</td>`;
   const regWin = wc ? `<div class="card"><h2>${esc(wc.title)}</h2>
     <p class="muted" style="margin-bottom:10px">${esc(wc.summary)}</p>
     <div class="scroll-x"><table class="tbl">
-    <tr><th>絞り込み方</th><th>400時点</th><th>360時点</th><th>440時点</th><th>t値</th></tr>
+    <tr><th>絞り込み方</th><th>並び0</th><th>並び1</th><th>並び2</th><th>平均</th><th>振れ幅</th><th>件数</th><th>t値</th></tr>
     ${wc.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
-      ${w3(r)}<td class="num">${num(r.t400, 2)}</td></tr>`).join('')}
+      ${w3(r)}<td class="num"><b>${r.avg != null ? (r.avg * 100).toFixed(1) + '%' : '—'}</b></td>
+      <td class="num ${r.span >= 0.04 ? 'down' : ''}">${r.span != null ? (r.span * 100).toFixed(1) + 'pt' : '—'}</td>
+      <td class="num">${r.n != null ? r.n + '件' : '—'}</td>
+      <td class="num ${r.t != null && r.t < 2 ? 'down' : ''}">${r.t != null ? r.t.toFixed(2) : '—'}</td></tr>`).join('')}
     </table></div>
     <p class="muted" style="margin-top:8px">${esc(wc.note)}</p>
-    ${oc ? `<h3 style="margin:14px 0 6px">${esc(oc.title)}</h3>
-      <div class="scroll-x"><table class="tbl">
-      <tr><th>絞り込み方</th><th>400時点</th><th>360時点</th><th>440時点</th><th>1日の回数</th><th>1日の期待値</th></tr>
-      ${oc.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
-        ${w3(r)}<td class="num">${num(r.per_day, 2)}回</td>
-        <td class="num ${cls(r.daily)}">${pct(r.daily)}</td></tr>`).join('')}
-      </table></div>
-      <p class="muted" style="margin-top:8px">${esc(oc.note)}</p>` : ''}
+    ${(wc.conclusions || []).length ? `<ul style="font-size:12.5px;color:var(--tx2);padding-left:18px;margin:10px 0 0">
+      ${wc.conclusions.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
     </div>` : '';
 
   // 試して効果が出なかった情報源。同じ道を二度調べないための記録。
@@ -1096,28 +1088,29 @@ function viewAcc(d) {
     </div>`).join('')}
     <p class="muted" style="margin-top:4px">${esc(v.rejected_data.note)}</p></div>` : '';
 
-  // 米国金利による見送り判定。採用した数少ない追加。
-  const rt = v.rates;
-  const w3r = r => `<td class="num ${r.w400 >= 0.55 ? 'up' : r.w400 < 0.50 ? 'down' : ''}">${(r.w400 * 100).toFixed(1)}%</td>
-      <td class="num">${(r.w360 * 100).toFixed(1)}%</td><td class="num">${(r.w440 * 100).toFixed(1)}%</td>`;
-  const rateCard = rt ? `<div class="card"><h2>${esc(rt.title)}</h2>
-    <p class="muted" style="margin-bottom:10px">${esc(rt.summary)}</p>
+  // 時点の並びをずらした3標本での測定。これまでの検査の穴を直したもの。
+  const g3 = (rt, cls3) => rt.rows.map(r => `<tr><td>${esc(r.name)}</td>
+      <td class="num">${(r.o0 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.o1 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.o2 * 100).toFixed(1)}%</td>
+      <td class="num ${cls3 && r.avg >= 0.55 ? 'up' : ''}"><b>${(r.avg * 100).toFixed(1)}%</b></td>
+      <td class="num ${r.span >= 0.06 ? 'down' : 'muted'}">${(r.span * 100).toFixed(1)}pt</td></tr>`).join('');
+  const gridCard = v.grid ? `<div class="card"><h2>${esc(v.grid.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(v.grid.summary)}</p>
     <div class="scroll-x"><table class="tbl">
-    <tr><th>条件</th><th>400時点</th><th>360時点</th><th>440時点</th><th>1日の回数</th><th>1日の期待値</th></tr>
-    ${rt.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
-      ${w3r(r)}<td class="num">${num(r.per_day, 2)}回</td>
-      <td class="num ${cls(r.daily)}">${pct(r.daily)}</td></tr>`).join('')}
-    </table></div>
-    <p class="muted" style="margin-top:8px">${esc(rt.held_out_note)}</p>
-    <h3 style="margin:14px 0 6px">${esc(rt.bands.title)}</h3>
+    <tr><th>条件</th><th>並び0</th><th>並び1</th><th>並び2</th><th>平均</th><th>振れ幅</th></tr>
+    ${v.grid.rows ? g3(v.grid, true) : ''}</table></div>
+    <p class="muted" style="margin-top:8px">${esc(v.grid.note)}</p>
+    <ul style="font-size:12.5px;color:var(--tx2);padding-left:18px;margin:10px 0 0">
+    ${v.grid.conclusions.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : '';
+  const rateCard = v.rates ? `<div class="card"><h2>${esc(v.rates.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(v.rates.summary)}</p>
     <div class="scroll-x"><table class="tbl">
-    <tr><th>金利変化の大きさ</th><th>追い風（400/360/440）</th><th>逆風（400/360/440）</th></tr>
-    ${rt.bands.rows.map(r => `<tr><td>${esc(r.band)}</td>
-      <td class="num up">${r.with.map(x => (x * 100).toFixed(1)).join(' / ')}%</td>
-      <td class="num ${r.without[0] < 0.50 ? 'down' : ''}">${r.without.map(x => (x * 100).toFixed(1)).join(' / ')}%</td></tr>`).join('')}
-    </table></div>
-    <p class="muted" style="margin-top:8px">${esc(rt.bands.note)}</p>
-    <p class="muted" style="margin-top:8px">${esc(rt.note)}</p></div>` : '';
+    <tr><th>条件</th><th>並び0</th><th>並び1</th><th>並び2</th><th>平均</th><th>振れ幅</th></tr>
+    ${v.rates.rows ? g3(v.rates, false) : ''}</table></div>
+    <p class="muted" style="margin-top:8px">${esc(v.rates.note)}</p>
+    <ul style="font-size:12.5px;color:var(--tx2);padding-left:18px;margin:10px 0 0">
+    ${v.rates.conclusions.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : '';
 
   const rules = T(v.stocks.title, 't値が2以上で統計的に有意。どのルールも頑健性検査を通りませんでした。',
     '<th>並べ替えルール</th><th>市場超過</th><th>t値</th>',
@@ -1135,7 +1128,9 @@ function viewAcc(d) {
       <td class="num ${cls(r.first)}">${pct(r.first)}</td><td class="num">${num(r.first_t, 2)}</td>
       <td class="num ${cls(r.second)}">${pct(r.second)}</td><td class="num">${num(r.second_t, 2)}</td></tr>`).join('')) : '';
 
-  const fxr = T(v.fx.title, v.fx.summary,
+  const legacy = v.fx.legacy_note
+    ? `<p class="muted" style="margin-top:8px">${esc(v.fx.legacy_note)}</p>` : '';
+  const fxr = T(v.fx.title, (v.fx.summary || '') + ' ' + (v.fx.legacy_note || ''),
     '<th>条件</th><th>件数</th><th>的中率</th><th>t値</th>',
     v.fx.rules.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">採用</span>' : ''}</td>
       <td class="num">${r.n.toLocaleString('ja-JP')}</td>
@@ -1156,15 +1151,20 @@ function viewAcc(d) {
       <td class="num">${(r.first * 100).toFixed(1)}%</td><td class="num">${(r.second * 100).toFixed(1)}%</td>
       <td class="num ${cls(r.net)}">${pct(r.net, 3)}</td></tr>`).join('')) : '';
 
-  const cnf = v.fx.confidence ? T(v.fx.confidence.title,
-    v.fx.confidence.summary + ' ' + v.fx.confidence.note,
-    '<th>確信度</th><th>勝率</th><th>1日</th><th>t値</th><th>期間をずらすと</th><th>前半/後半</th>',
-    v.fx.confidence.rows.map(r => `<tr><td>${(r.conf * 100).toFixed(0)}%以上${r.adopted ? ' <span class="pill ok">既定</span>' : ''}</td>
-      <td class="num ${r.hit >= 0.58 ? 'up' : ''}">${(r.hit * 100).toFixed(1)}%</td>
+  const cnf = v.fx.confidence ? `<div class="card"><h2>${esc(v.fx.confidence.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(v.fx.confidence.note)}</p>
+    <div class="scroll-x"><table class="tbl">
+    <tr><th>確信度</th><th>勝率(平均)</th><th>1日</th><th>件数</th><th>t値</th><th>並びをずらすと</th></tr>
+    ${v.fx.confidence.rows.map(r => `<tr><td>${(r.conf * 100).toFixed(0)}%以上${
+      r.adopted ? ' <span class="pill ok">既定</span>' : ''}</td>
+      <td class="num ${r.reliable === false ? 'down' : (r.hit >= 0.56 ? 'up' : '')}">${(r.hit * 100).toFixed(1)}%</td>
       <td class="num">${r.per_day.toFixed(2)}回</td>
-      <td class="num">${num(r.t, 2)}</td>
-      <td class="num muted">${r.windows.map(w => (w * 100).toFixed(1)).join(' / ')}</td>
-      <td class="num muted">${(r.first * 100).toFixed(1)} / ${(r.second * 100).toFixed(1)}</td></tr>`).join('')) : '';
+      <td class="num">${r.n}件</td>
+      <td class="num ${r.t < 2 ? 'down' : ''}">${num(r.t, 2)}</td>
+      <td class="num muted">${r.by_offset.map(w => (w * 100).toFixed(1)).join(' / ')}
+        <span class="${r.spread >= 0.06 ? 'down' : ''}">±${(r.spread * 100).toFixed(1)}pt</span></td></tr>`).join('')}
+    </table></div>
+    <p class="muted" style="margin-top:8px">${esc(v.fx.confidence.conclusion)}</p></div>` : '';
 
   const tim = v.fx.timing ? T(v.fx.timing.title, v.fx.timing.summary + ' ' + v.fx.timing.note,
     '<th>区分</th><th>400時点</th><th>360時点</th><th>440時点</th>',
@@ -1177,12 +1177,16 @@ function viewAcc(d) {
     <p style="font-size:13px;margin:0 0 8px">${esc(v.tradingview.summary)}</p>
     <p class="muted">${esc(v.tradingview.note)}</p></div>` : '';
 
-  const ind = v.fx.indicators ? T(v.fx.indicators.title, v.fx.indicators.note,
-    '<th>条件</th><th>件数</th><th>的中率</th><th>1回あたり</th><th>t値</th>',
-    v.fx.indicators.rows.map(r => `<tr><td>${esc(r.name)}${r.adopted ? ' <span class="pill ok">表示に採用</span>' : ''}</td>
-      <td class="num">${r.n}</td>
-      <td class="num ${r.hit_rate >= 0.58 ? 'up' : ''}">${(r.hit_rate * 100).toFixed(1)}%</td>
-      <td class="num">${pct(r.mean, 3)}</td><td class="num">${num(r.t, 2)}</td></tr>`).join('')) : '';
+  const ind = v.fx.indicators ? `<div class="card"><h2>${esc(v.fx.indicators.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(v.fx.indicators.note)}</p>
+    <div class="scroll-x"><table class="tbl">
+    <tr><th>区分</th><th>勝率(平均)</th><th>並び0/1/2</th><th>件数</th></tr>
+    ${v.fx.indicators.rows.map(r => `<tr><td>${esc(r.name)}</td>
+      <td class="num ${r.hit >= 0.57 ? 'up' : r.hit < 0.55 ? 'down' : ''}">${(r.hit * 100).toFixed(1)}%</td>
+      <td class="num muted">${r.by_offset.map(w => (w * 100).toFixed(1)).join(' / ')}%</td>
+      <td class="num">${r.n}件</td></tr>`).join('')}
+    </table></div>
+    <p class="muted" style="margin-top:8px">${esc(v.fx.indicators.conclusion)}</p></div>` : '';
 
   const costTbl = v.costs ? T(v.costs.title, v.costs.note,
     '<th>区分</th><th>片道</th><th>往復</th><th>うち為替</th>',
@@ -1198,7 +1202,7 @@ function viewAcc(d) {
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
     ${v.costs ? esc(v.costs.summary) : ''}</div>
-  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${cnf}${rateCard}${tim}${ind}${rej}${tv}
+  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${gridCard}${cnf}${rateCard}${tim}${ind}${rej}${tv}
   <div class="card"><h2>検証方法と注意点</h2>
     <p style="font-size:13px">${esc(v.method)}</p>
     <p class="muted">${esc(v.data_note)}</p>
