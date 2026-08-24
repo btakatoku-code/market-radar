@@ -300,3 +300,4 @@
 {"date": "2026-08-24", "ts": 1787579836, "key": "U", "name": "ユニティ・ソフトウェア", "bucket": "category", "horizon": 21, "price": 46.5, "pred": 0.02917383680850246, "prob": 0.556837884698743, "rank": 2, "due": 1790085436, "actual": null}
 {"date": "2026-08-24", "ts": 1787579836, "key": "ROKU", "name": "ロク", "bucket": "category", "horizon": 21, "price": 158.43, "pred": 0.004982610249227495, "prob": 0.5301007541622346, "rank": 3, "due": 1790085436, "actual": null}
 {"date": "2026-08-24", "ts": 1787579836, "key": "SPYD", "name": "SPDR ポートフォリオS&P500高配当株式ETF", "bucket": "category", "horizon": 21, "price": 50.86, "pred": 0.0046430043748529985, "prob": 0.5553737658674189, "rank": 2, "due": 1790085436, "actual": null}
+{"date": "2026-08-24", "ts": 1787580308, "key": "VIG", "name": "バンガード 米国増配株式ETF", "bucket": "category", "horizon": 21, "price": 244.41, "pred": 0.0040707758332557, "prob": 0.5450158775213326, "rank": 3, "due": 1790085908, "actual": null}
