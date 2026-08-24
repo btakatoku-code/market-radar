@@ -4,6 +4,7 @@ let DATA = null, VALID = null, VIEW = 'home', CAT = 0;
 let BASE_LONG = null, BASE_FX = null;   // 何もせず買った場合の上昇率
 let DIR = null, DIR_LOADING = false;    // 銘柄索引（保有タブでだけ使う・別ファイル）
 let HOLD_Q = '';                        // 銘柄検索の入力
+let HOLD_TAB = 'stock';                 // 保有タブ内の切り替え（株 / FX）
 
 /* 索引は600件近くあり本体に含めると重いので、保有タブを開いたときだけ取りに行く。 */
 async function loadDirectory() {
@@ -57,7 +58,7 @@ function settings() {
     risk: fp.risk_per_trade || 0.02, trades: fp.trades_per_day || 1,
     stockCapital: sd.capital || 300000, stockRisk: sd.risk || 0.02,
     fxConf: d.fx_min_confidence || 0.56,   // シグナルとみなす確信度の下限
-    holdings: [],
+    holdings: [], fxPositions: [],
   };
   try {
     return Object.assign({}, def, JSON.parse(localStorage.getItem(SET_KEY) || '{}'));
@@ -820,7 +821,15 @@ function viewHold(d) {
       + '銘柄数が少ないため分散は効いていません。</p>';
   }
 
-  return `<div class="banner"><strong>保有ポジション</strong>
+  if (HOLD_TAB === 'fx') {
+    return `<div class="chips" style="margin-bottom:10px">
+      <button class="chip" data-htab="stock">株・ETF</button>
+      <button class="chip on" data-htab="fx">FX</button></div>` + fxHoldBlock(s);
+  }
+  return `<div class="chips" style="margin-bottom:10px">
+      <button class="chip on" data-htab="stock">株・ETF</button>
+      <button class="chip" data-htab="fx">FX</button></div>
+    <div class="banner"><strong>保有ポジション</strong>
     取得単価と数量を入れると、損益・構成比・いまの予測を並べて見られます。
     入力内容は<b>この端末にだけ</b>保存され、どこにも送信されません。</div>
     <div class="card"><h2>保有を追加</h2>
@@ -837,6 +846,354 @@ function viewHold(d) {
       <p class="muted">${DIR.length.toLocaleString('ja-JP')} 銘柄から検索できます。</p>
     </div>
     <div class="card"><h2>合計</h2>${totals}${conc}</div>
+    ${list}`;
+}
+
+
+
+/* ---------- 買う前の点検表 ----------
+   材料はすべてアプリの中にあるのに、一つの答えになっていなかった。
+   「この取引を、いまの建玉に足すとどうなるか」を一枚にまとめる。
+   ○×は事実の確認であって、売買の指示ではない。 */
+function preTradeCheck(sig, st) {
+  const cap = st.capital || 0;
+  const lv = ((DATA.fx_levels || []).slice().sort((a, b) =>
+    Math.abs(a.conf - st.fxConf) - Math.abs(b.conf - st.fxConf))[0]) || null;
+  const edge = (DATA.fx && DATA.fx.plan && DATA.fx.plan.measured
+    && DATA.fx.plan.measured.edge_per_trade) || 0.00088;
+  const spread2 = (sig.spread_pct || 0) * 2;
+
+  // 適正な通貨量：損切りまでの値幅で、資金の risk% だけ失う量
+  const legs = fxLegs(sig.key);
+  const rate = (DATA.usdjpy && DATA.usdjpy.rate) || null;
+  // 決済通貨が円ならそのまま、それ以外はドル円で円に直す。
+  // どちらも分からないときは数量を出さない（誤った数字を出すより空欄にする）。
+  const conv = !legs ? null : legs[1] === 'JPY' ? 1 : (legs[1] === 'USD' ? rate : null);
+  const perUnit = conv ? Math.abs((sig.entry || 0) - (sig.stop || 0)) * conv : null;
+  const qty = (perUnit > 0) ? Math.floor(cap * (st.risk || 0.02) / perUnit) : null;
+
+  // いまの建玉に1本足したらどうなるか
+  const cur = fxPositions(st);
+  const add = { key: sig.key, name: sig.name,
+    sign: sig.direction === '買い' ? 1 : -1,
+    risk: st.risk || 0.02, weight: st.risk || 0.02 };
+  const before = cur.length ? fxDiagnoseLocal(cur, cap, st.risk, st.risk * 2) : null;
+  const after = fxDiagnoseLocal(cur.concat([add]), cap, st.risk, st.risk * 2);
+  const worstBefore = before ? before.worst_total_risk : 0;
+  const worstAfter = after.worst_total_risk;
+  const budget = (st.risk || 0.02) * 2;
+
+  // 既存建玉のうち、値動きが揃うもの
+  const clash = cur.map(p => ({ name: p.name, samePair: p.key === sig.key,
+    corr: fxCorrOf(p.key, sig.key) * p.sign * add.sign }))
+    .filter(x => Math.abs(x.corr) >= 0.7)
+    .sort((a, b) => Math.abs(b.corr) - Math.abs(a.corr));
+  const clashText = c => c.samePair
+    ? `${c.name}の${c.corr > 0 ? '同じ' : '反対'}向きの建玉があります。`
+      + (c.corr > 0 ? '実質、1つの大きな建玉になります。' : '実質、決済に近い動きになります。')
+    : `${c.name}と相関${c.corr >= 0 ? '+' : ''}${c.corr.toFixed(2)}。`
+      + (c.corr > 0 ? '実質、同じ取引を重ねることになります。' : '互いに打ち消し合います。');
+
+  const ev = sig.timing && sig.timing.has_event;
+  const items = [
+    { ok: sig.confidence >= st.fxConf,
+      t: `確信度 ${(sig.confidence * 100).toFixed(0)}%`,
+      d: sig.confidence >= st.fxConf
+        ? `基準の${(st.fxConf * 100).toFixed(0)}%以上です（この区分の実測${
+          lv ? (lv.hit * 100).toFixed(1) : '—'}%）。`
+        : `基準の${(st.fxConf * 100).toFixed(0)}%に届いていません。この水準未満に優位性は確認できていません。` },
+    { ok: spread2 < edge * 0.5,
+      t: `往復コスト ${(spread2 * 100).toFixed(3)}%`,
+      d: `実測の1回あたりの利益${(edge * 100).toFixed(3)}%に対して${
+        edge > 0 ? (spread2 / edge * 100).toFixed(0) : '—'}%です。` },
+    { ok: sig.leverage_ok !== false,
+      t: `必要レバレッジ ${num(sig.leverage, 1)}倍`,
+      d: sig.leverage_ok !== false ? '国内業者の上限25倍に収まっています。'
+        : '25倍を超えています。通貨量を減らす必要があります。' },
+    { ok: !ev,
+      t: ev ? '経済指標あり' : '経済指標なし',
+      d: ev ? `${(sig.timing.currencies || []).join('・')}の指標が予定されています（${
+        (sig.timing.events || []).slice(0, 2).join('、')}）。値動きが荒くなることがあります。`
+        : 'この通貨に関係する重要な指標の予定はありません。' },
+    { ok: !clash.length,
+      t: clash.length ? '値動きが連動する建玉あり' : '建玉との重複なし',
+      d: clash.length ? clash.map(clashText).join(' ')
+        : 'いまの建玉と値動きが揃うものはありません。' },
+    { ok: worstAfter <= budget * 1.05,
+      t: `建てた後の合計リスク ${(worstAfter * 100).toFixed(1)}%`,
+      d: `${(worstBefore * 100).toFixed(1)}% → ${(worstAfter * 100).toFixed(1)}%（${
+        yen(Math.round(cap * worstAfter))}）。想定は${(budget * 100).toFixed(1)}%です。` },
+  ];
+  const ng = items.filter(x => !x.ok).length;
+
+  return `<details class="detail"><summary>この取引を建てる前の点検（${
+    ng ? `${ng}件の注意` : 'すべて確認済み'}）</summary>
+    <ul class="checks" style="grid-template-columns:1fr">
+      ${items.map(i => `<li class="${i.ok ? 'yes' : 'no'}">${i.ok ? '✓' : '✕'} ${
+        esc(i.t)}<br><span class="muted" style="font-size:11.5px">${esc(i.d)}</span></li>`).join('')}
+    </ul>
+    <div class="metrics" style="margin-top:10px">
+      <div class="metric"><span class="k">適正な通貨量</span>
+        <span class="v">${qty != null ? qty.toLocaleString('ja-JP') : '—'}</span></div>
+      <div class="metric"><span class="k">損切り時の損失</span>
+        <span class="v down">${yen(Math.round(cap * (st.risk || 0.02)))}</span></div>
+      <div class="metric"><span class="k">建玉数</span>
+        <span class="v">${cur.length} → ${after.count} 本</span></div>
+      <div class="metric"><span class="k">実質の賭けの数</span>
+        <span class="v">${after.offsetting ? '打ち消し合い' : after.effective_bets.toFixed(1) + '本'}</span></div>
+    </div>
+    <p class="muted" style="margin-top:9px">通貨量は、資金${yen(cap)}の${
+      ((st.risk || 0.02) * 100).toFixed(1)}%を損切りで失う大きさとして計算しています。
+      資金設定を変えるとこの数字も変わります。</p></details>`;
+}
+
+/* ---------- FXの建玉とリスク計算 ----------
+   建玉の入力はこの端末にしかないので、相関表だけサーバーから受け取り、
+   計算はここで行う。式は engine/fxrisk.py と同じ。 */
+function fxCorrOf(a, b) {
+  if (a === b) return 1;
+  const c = (DATA && DATA.fx_corr && DATA.fx_corr.pairs) || {};
+  const v = c[a + '|' + b];
+  return v != null ? v : (c[b + '|' + a] != null ? c[b + '|' + a] : 0);
+}
+function fxLegs(k) {
+  const l = (DATA && DATA.fx_corr && DATA.fx_corr.legs) || {};
+  if (l[k]) return l[k];
+  // データが古いなどで対応表が無いときは、記号から読み取る（USDJPY=X → USD/JPY）。
+  // ここが取れないと円換算を誤り、通貨量の計算が桁違いになるため必ず補う。
+  const m = String(k || '').match(/^([A-Z]{3})([A-Z]{3})=X$/);
+  return m ? [m[1], m[2]] : null;
+}
+function fxCurName(c) {
+  const n = (DATA && DATA.fx_corr && DATA.fx_corr.names) || {};
+  return n[c] || c;
+}
+function fxMeanCorr(ps) {
+  if (ps.length < 2) return 0;
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < ps.length; i++)
+    for (let j = i + 1; j < ps.length; j++) {
+      sum += fxCorrOf(ps[i].key, ps[j].key) * ps[i].sign * ps[j].sign;
+      cnt++;
+    }
+  return cnt ? sum / cnt : 0;
+}
+function fxRiskMult(n, mc) {
+  if (n <= 0) return 0;
+  return Math.sqrt(Math.max(n * (1 + (n - 1) * mc), 0));
+}
+function fxEffectiveBets(n, mc) {
+  if (n <= 1) return n;
+  const d = 1 + (n - 1) * mc;
+  return d <= 0 ? n : Math.min(n / d, n);
+}
+function fxExposure(ps) {
+  const net = {};
+  ps.forEach(p => {
+    const legs = fxLegs(p.key);
+    if (!legs) return;
+    const w = (p.weight == null ? 1 : p.weight) * p.sign;
+    net[legs[0]] = (net[legs[0]] || 0) + w;
+    net[legs[1]] = (net[legs[1]] || 0) - w;
+  });
+  const total = Object.values(net).reduce((t, v) => t + Math.abs(v), 0) || 1;
+  return Object.entries(net).filter(([, v]) => Math.abs(v) > 1e-9)
+    .map(([c, v]) => ({ currency: c, name: fxCurName(c), net: v,
+      share: Math.abs(v) / total,
+      side: v > 0 ? '買い越し' : '売り越し' }))
+    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+}
+// engine/fxrisk.diagnose と同じ結果を返す
+function fxDiagnoseLocal(ps, capital, riskPerTrade, budget) {
+  const n = ps.length;
+  if (!n) return null;
+  const mc = fxMeanCorr(ps);
+  const mult = fxRiskMult(n, mc);
+  // 実際の損切り幅が分かっていればそれを合計する。分からなければ設定値×本数。
+  const known = ps.filter(p => p.risk != null);
+  const worst = known.length === n
+    ? ps.reduce((t, p) => t + p.risk, 0) : riskPerTrade * n;
+  const byVol = mult > 0 ? budget / mult : riskPerTrade;
+  const byWorst = budget / n;
+  const suggested = Math.min(byVol, byWorst, riskPerTrade);
+  const high = (DATA.fx_corr && DATA.fx_corr.high) || 0.7;
+  const hot = [];
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++) {
+      const c = fxCorrOf(ps[i].key, ps[j].key) * ps[i].sign * ps[j].sign;
+      if (Math.abs(c) >= high) hot.push({ a: ps[i].name, b: ps[j].name, corr: c, same: c > 0 });
+    }
+  hot.sort((x, y) => Math.abs(y.corr) - Math.abs(x.corr));
+  return {
+    count: n, mean_corr: mc, effective_bets: fxEffectiveBets(n, mc),
+    risk_multiplier: mult, worst_total_risk: worst,
+    worst_total_yen: Math.round(capital * worst),
+    suggested_per_trade: suggested, suggested_worst_risk: suggested * n,
+    risk_budget: budget, reduce_needed: suggested < riskPerTrade * 0.95,
+    offsetting: mc < -0.2 && n >= 2, exposure: fxExposure(ps),
+    high_corr_pairs: hot,
+    matrix: (() => {
+      const out = [];
+      for (let i = 0; i < n; i++)
+        for (let j = i + 1; j < n; j++)
+          out.push({ a: ps[i].key, b: ps[j].key, corr: fxCorrOf(ps[i].key, ps[j].key) });
+      return out;
+    })(),
+    warnings: (() => {
+      const w = [];
+      const eff = fxEffectiveBets(n, mc);
+      if (n >= 2 && eff < n * 0.6)
+        w.push(`${n}本のうち、実質${eff.toFixed(1)}本ぶんの賭けにしかなっていません。`
+          + '値動きが揃うため、分散したつもりで同じ方向に賭けている状態です。');
+      if (mc < -0.2 && n >= 2)
+        w.push(`いまは値動きが逆向き（平均相関${mc.toFixed(2)}）で打ち消し合っていますが、`
+          + '相場が荒れると相関は1に近づきます。これを前提にポジションを増やさないでください。');
+      hot.slice(0, 3).forEach(h => w.push(
+        `${h.a}と${h.b}は相関${h.corr >= 0 ? '+' : ''}${h.corr.toFixed(2)}で、ほぼ同じ取引です。`
+        + (h.same ? '片方に絞ることを検討してください。' : '互いに打ち消し合っています。')));
+      if (worst > budget * 1.2)
+        w.push(`全部が損切りに掛かると資金の${(worst * 100).toFixed(1)}%を失います。`
+          + (suggested < riskPerTrade * 0.95
+            ? `1本あたりを${(suggested * 100).toFixed(1)}%（${n}本で合計`
+              + `${(suggested * n * 100).toFixed(1)}%）に下げるか、本数を減らしてください。`
+            : `想定していた${(budget * 100).toFixed(1)}%を超えるので、本数を減らすか、`
+              + '1回のリスク設定を見直してください。'));
+      return w;
+    })(),
+  };
+}
+
+// 建玉を診断に渡せる形にする。
+// 同じペアを同じ向きで複数持っているのは「1つの大きな建玉」なのでまとめる。
+// 重みには、損切りまでの実際の損失額（資金比）を使う。仮の2%より正確。
+function fxPositions(st) {
+  const cap = st.capital || 1;
+  const acc = {};
+  (st.fxPositions || []).forEach(p => {
+    const k = p.key + '|' + p.side;
+    const m = fxMark(p, st);
+    const risk = (m.riskJpy != null && cap) ? m.riskJpy / cap : (st.risk || 0.02);
+    if (!acc[k]) acc[k] = { key: p.key, name: p.name,
+      sign: p.side === '買い' ? 1 : -1, risk: 0, weight: 0 };
+    acc[k].risk += risk;
+    acc[k].weight += risk;
+  });
+  return Object.values(acc);
+}
+
+// その建玉の、いまの値と損益
+function fxMark(p, st) {
+  const sig = ((DATA.fx && DATA.fx.signals) || []).find(x => x.key === p.key);
+  const cur = sig ? sig.price : null;
+  const legs = fxLegs(p.key);
+  const rate = (DATA.usdjpy && DATA.usdjpy.rate) || null;
+  // 円換算：決済通貨が円ならそのまま、ドルならドル円を掛ける。
+  // 判別できないときは金額を出さない（誤った円換算を出さないため）。
+  const conv = !legs ? null : legs[1] === 'JPY' ? 1 : (legs[1] === 'USD' ? rate : null);
+  const toJpy = v => (v == null || !conv ? null : v * conv);
+  const sign = p.side === '買い' ? 1 : -1;
+  const move = (cur != null && p.entry) ? (cur - p.entry) * sign : null;
+  const pl = toJpy(move != null ? move * p.qty : null);
+  const spread = (DATA.fx_spread && DATA.fx_spread[p.key]) || 0;
+  const costJpy = toJpy(p.entry * spread * 2 * p.qty);
+  const toStop = (cur != null && p.stop) ? Math.abs(cur - p.stop) / cur : null;
+  const toTarget = (cur != null && p.target) ? Math.abs(cur - p.target) / cur : null;
+  const riskJpy = toJpy(p.stop ? Math.abs(p.entry - p.stop) * p.qty : null);
+  const hit = p.stop != null && cur != null &&
+    (sign > 0 ? cur <= p.stop : cur >= p.stop);
+  const won = p.target != null && cur != null &&
+    (sign > 0 ? cur >= p.target : cur <= p.target);
+  return { sig, cur, pl, costJpy, toStop, toTarget, riskJpy, hit, won, sign,
+    agree: sig ? (sig.direction === p.side) : null };
+}
+
+
+/* ---------- FXの建玉：いま持っているものをどうするか ----------
+   アプリは買う側だけを扱ってきたが、実際は持っているものの扱いの方が
+   回数が多い。ここでは事実だけを並べる（到達したか、モデルは何と言っているか、
+   コストを取り返したか）。売れ・持てとは言わない。 */
+function fxHoldBlock(st) {
+  const sigs = (DATA.fx && DATA.fx.signals) || [];
+  const opts = sigs.map(x =>
+    `<option value="${esc(x.key)}">${esc(x.name)}</option>`).join('');
+  const form = `<div class="card"><h2>FXの建玉を追加</h2>
+    <div class="set-grid">
+      <label>通貨ペア<select id="fp-pair">${opts}</select></label>
+      <label>売買<select id="fp-side"><option>買い</option><option>売り</option></select></label>
+      <label>建値<input id="fp-entry" type="number" inputmode="decimal" step="0.0001" placeholder="158.78"></label>
+      <label>通貨量<input id="fp-qty" type="number" inputmode="numeric" step="1000" placeholder="10000"></label>
+      <label>損切り<input id="fp-stop" type="number" inputmode="decimal" step="0.0001" placeholder="160.47"></label>
+      <label>利確<input id="fp-target" type="number" inputmode="decimal" step="0.0001" placeholder="156.26"></label>
+    </div>
+    <button id="fp-add" class="add" style="margin-top:9px">建玉を追加</button>
+    <p class="muted" style="margin-top:8px">通貨量は「1万通貨なら 10000」のように入れてください。
+      損切りと利確は空でも構いません。入力内容は<b>この端末にだけ</b>保存されます。</p></div>`;
+
+  const list = (st.fxPositions || []).map((p, i) => {
+    const m = fxMark(p, st);
+    const notes = [];
+    if (m.hit) notes.push('損切り価格に到達しています。');
+    if (m.won) notes.push('利確価格に到達しています。');
+    if (m.agree === false && m.sig && m.sig.confidence >= st.fxConf)
+      notes.push(`いまのモデルは反対の${esc(m.sig.direction)}を示しています`
+        + `（確信度${(m.sig.confidence * 100).toFixed(0)}%）。`);
+    if (m.agree === true && m.sig && m.sig.confidence >= st.fxConf)
+      notes.push(`いまのモデルも同じ${esc(m.sig.direction)}を示しています`
+        + `（確信度${(m.sig.confidence * 100).toFixed(0)}%）。`);
+    if (m.pl != null && m.costJpy != null && m.pl > 0 && m.pl < m.costJpy)
+      notes.push(`含み益${yen(Math.round(m.pl))}は往復コスト${yen(Math.round(m.costJpy))}`
+        + 'をまだ取り返していません。');
+    return `<article class="item">
+      <div class="item-head">
+        <div class="item-title">
+          <span class="nm">${esc(p.name)}
+            <span class="pill ${p.side === '買い' ? 'ok' : 'no'}">${esc(p.side)}</span></span>
+          <span class="sub">建値 ${num(p.entry, 4)} · ${(p.qty || 0).toLocaleString('ja-JP')}通貨</span>
+        </div>
+        <div class="item-fig">
+          <div class="pct ${cls(m.pl)}">${m.pl != null ? yen(Math.round(m.pl)) : '—'}</div>
+          <div class="pr">いま ${num(m.cur, 4)}</div>
+        </div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><span class="k">損切りまで</span>
+          <span class="v ${m.hit ? 'down' : ''}">${m.toStop != null ? pct(m.toStop) : '—'}</span></div>
+        <div class="metric"><span class="k">利確まで</span>
+          <span class="v ${m.won ? 'up' : ''}">${m.toTarget != null ? pct(m.toTarget) : '—'}</span></div>
+        <div class="metric"><span class="k">損切り時の損失</span>
+          <span class="v">${m.riskJpy != null ? yen(Math.round(m.riskJpy)) : '—'}</span></div>
+        <div class="metric"><span class="k">往復コスト</span>
+          <span class="v">${m.costJpy != null ? yen(Math.round(m.costJpy)) : '—'}</span></div>
+      </div>
+      ${notes.length ? `<ul class="pf-warn" style="margin-top:10px">${
+        notes.map(t => `<li>${t}</li>`).join('')}</ul>` : ''}
+      <button class="del" data-fpdel="${i}" style="margin-top:9px">削除</button>
+    </article>`;
+  }).join('');
+
+  const ps = fxPositions(st);
+  const diag = ps.length
+    ? fxDiagnoseLocal(ps, st.capital, st.risk, st.risk * 2) : null;
+  const totalPl = (st.fxPositions || []).reduce((t, p) => {
+    const m = fxMark(p, st);
+    return t + (m.pl || 0);
+  }, 0);
+  const totals = ps.length ? `<div class="card"><h2>建玉の合計</h2>
+    <div class="row"><span class="muted">含み損益</span>
+      <span class="num ${cls(totalPl)}">${yen(Math.round(totalPl))}</span></div>
+    <div class="row"><span class="muted">建玉数</span>
+      <span class="num">${ps.length} 本</span></div>
+    <div class="row"><span class="muted">全部が損切りに掛かったら</span>
+      <span class="num down">${yen(Math.round((st.fxPositions || []).reduce((t, p) =>
+        t + (fxMark(p, st).riskJpy || 0), 0)))}</span></div></div>` : '';
+
+  return `<div class="banner"><strong>FXの建玉</strong>
+    いま持っているポジションを入れると、損益・損切りまでの距離・
+    いまのモデルの見方・全体のリスクを並べて見られます。
+    ここに出るのは<b>事実だけ</b>です。売買の指示ではありません。</div>
+    ${form}${totals}
+    ${diag ? pfBlock(diag, st, '建玉全体の診断',
+      'いま持っているポジションを通貨に分解した結果です。') : ''}
     ${list}`;
 }
 
@@ -879,8 +1236,11 @@ function pfBlock(pf, st, title, note) {
     <div class="pf-tile ${pf.worst_total_risk > pf.risk_budget * 1.2 ? 'alert' : ''}">
       <span class="k">全部やられたら</span>
       <span class="v">${yen(worstYen)}<span class="u">${(pf.worst_total_risk * 100).toFixed(1)}%</span></span></div>
-    <div class="pf-tile ${pf.reduce_needed ? 'alert' : ''}"><span class="k">推奨 1本あたり</span>
-      <span class="v">${(pf.suggested_per_trade * 100).toFixed(1)}<span class="u">% · ${yen(sugYen)}</span></span></div>
+    <div class="pf-tile ${pf.reduce_needed || pf.worst_total_risk > pf.risk_budget * 1.2 ? 'alert' : ''}">
+      <span class="k">推奨 1本あたり</span>
+      <span class="v">${(pf.suggested_per_trade * 100).toFixed(1)}<span class="u">% · ${yen(sugYen)}</span></span>
+      ${pf.count ? `<span class="k" style="margin-top:3px">いま平均 ${
+        ((pf.worst_total_risk / pf.count) * 100).toFixed(1)}%</span>` : ''}</div>
   </div>`;
 
   const maxShare = Math.max(...pf.exposure.map(e => e.share), 0.001);
@@ -898,12 +1258,12 @@ function pfBlock(pf, st, title, note) {
     <div class="pf-axis"><span></span><span><span>← 売り越し</span><span>買い越し →</span></span><span></span></div>
   </div>` : '';
 
-  const keys = [...new Set(pf.matrix.flatMap(m => [m.a, m.b]))];
+  const keys = [...new Set((pf.matrix || []).flatMap(m => [m.a, m.b]))];
   const nm = {};
   (DATA.fx.signals || []).forEach(x => { nm[x.key] = x.name; });
   const get = (a, b) => {
     if (a === b) return null;
-    const m = pf.matrix.find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+    const m = (pf.matrix || []).find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a));
     return m ? m.corr : 0;
   };
   const mx = keys.length >= 2 ? `<div class="pf-mx"
@@ -1020,6 +1380,7 @@ function viewFx(d) {
       ${chartSVG(s.chart, 140)}
       ${macdChart(s.ind_chart)}
       ${rsiChart(s.ind_chart)}
+      ${preTradeCheck(s, st)}
       ${confirmBlock(s.confirm, on)}
       ${timingBlock(s.timing)}
       <div class="levels">
@@ -1404,6 +1765,34 @@ function bindHoldings() {
     b.addEventListener('click', () => {
       const st = settings();
       st.holdings.splice(+b.dataset.del, 1);
+      saveSettings(st);
+      render();
+    }));
+
+  document.querySelectorAll('[data-htab]').forEach(b =>
+    b.addEventListener('click', () => { HOLD_TAB = b.dataset.htab; render(); }));
+
+  const fadd = $('#fp-add');
+  if (fadd) fadd.addEventListener('click', () => {
+    const key = $('#fp-pair').value;
+    const sig = ((DATA.fx && DATA.fx.signals) || []).find(x => x.key === key);
+    const entry = parseFloat($('#fp-entry').value);
+    const qty = parseFloat($('#fp-qty').value);
+    if (!key || !(entry > 0) || !(qty > 0)) return;
+    const num2 = el => { const v = parseFloat(el.value); return v > 0 ? v : null; };
+    const st = settings();
+    st.fxPositions = (st.fxPositions || []).concat([{
+      key, name: sig ? sig.name : key, side: $('#fp-side').value,
+      entry, qty, stop: num2($('#fp-stop')), target: num2($('#fp-target')),
+      opened: new Date().toISOString().slice(0, 10),
+    }]);
+    saveSettings(st);
+    render();
+  });
+  document.querySelectorAll('[data-fpdel]').forEach(b =>
+    b.addEventListener('click', () => {
+      const st = settings();
+      (st.fxPositions || []).splice(+b.dataset.fpdel, 1);
       saveSettings(st);
       render();
     }));

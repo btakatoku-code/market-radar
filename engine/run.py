@@ -419,6 +419,16 @@ def build(use_cache=False, verbose=True):
     pool_fx = analog.build_pool(fx_assets, config.HORIZON_FX)
     rate_series = ratesmod.load()
     fx_signals = fxmod.signals(fx_assets, pool_fx, rate_series=rate_series)
+    # 建玉の入力はブラウザ側にしかないので、相関表と通貨の対応を渡して
+    # アプリ側で計算できるようにする。データに依る部分だけがサーバーの仕事。
+    fx_corr = fxrisk.correlations(fx_assets, [a["key"] for a in fx_assets])
+    fx_corr_out = {"pairs": {}, "legs": {}, "names": fxrisk.CURRENCY_NAMES,
+                   "window": fxrisk.CORR_WINDOW, "high": fxrisk.HIGH_CORR}
+    for (a, b), c in fx_corr.items():
+        fx_corr_out["pairs"]["{}|{}".format(a, b)] = round(c, 3)
+    for k, legs in fxrisk.PAIR_LEGS.items():
+        fx_corr_out["legs"][k] = list(legs)
+
     # ポジション全体の診断。円換算の金額は資金設定に依存するので、
     # 割合だけを返してアプリ側で掛け算する。
     fx_portfolio = fxrisk.diagnose(
@@ -576,6 +586,9 @@ def build(use_cache=False, verbose=True):
         "fx_signal_pairs": len(config.FX_SIGNAL_PAIRS),
         "fx_pool_pairs": len(fx_assets),
         "fx_confirmed": fxmod.CONFIRMED,
+        "fx_corr": fx_corr_out,
+        "fx_spread": {k: v for k, v in fxmod.SPREAD.items()},
+        "fx_max_leverage": fxmod.MAX_LEVERAGE,
         "fx_levels": fxmod.CONFIDENCE_LEVELS,
         "fx_rate_retracted": fxmod.RATE_RETRACTED,
         "fx_confirm_measured": fxmod.CONFIRM_MEASURED,
