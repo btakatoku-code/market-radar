@@ -1833,6 +1833,43 @@ $('#refresh').addEventListener('click', () => load(true));
 
 load(false);
 
+/* ---------- 版の確認 ----------
+   iPhoneのホーム画面から使うとページが長時間そのまま残るため、
+   更新しても古い画面を見続けることがある。復帰したときに版を確かめ、
+   変わっていればキャッシュを捨てて読み直す。 */
+const APP_VERSION = (() => {
+  const el = document.querySelector('script[src*="app.js"]');
+  const m = el && String(el.src).match(/[?&]v=(\d+)/);
+  return m ? m[1] : null;
+})();
+
+async function checkVersion() {
+  if (!APP_VERSION) return;
+  if (sessionStorage.getItem('mr-reloaded') === APP_VERSION) return;
+  try {
+    const r = await fetch('version.json?cb=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const v = String((await r.json()).version || '');
+    if (!v || v === APP_VERSION) return;
+    // 読み直しの繰り返しを防ぐため、一度試したことを覚えておく
+    sessionStorage.setItem('mr-reloaded', APP_VERSION);
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k.indexOf('mr-shell') === 0).map(k => caches.delete(k)));
+    if (navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(x => x.update().catch(() => { })));
+    }
+    location.reload();
+  } catch (e) { /* 通信できないときは何もしない */ }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkVersion();
+});
+
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => { });
+    checkVersion();
+  });
 }

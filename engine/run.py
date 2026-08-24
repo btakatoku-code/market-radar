@@ -603,8 +603,35 @@ def build(use_cache=False, verbose=True):
     }
 
 
+def _write_version(verbose=True):
+    """アプリの版を version.json に書き出す。
+
+    index.html の ?v= を読み取るので、版の管理場所は index.html だけになる。
+    アプリはこのファイルと自分の版を比べ、違っていればキャッシュを捨てて
+    読み直す。iPhoneのホーム画面から使うとページが長く残るため、これがないと
+    更新しても古い画面を見続けることがある。
+    """
+    import re
+    idx = os.path.join(os.path.dirname(OUT_DIR), "index.html")
+    ver = None
+    try:
+        with open(idx, encoding="utf-8") as f:
+            m = re.search(r"[?&]v=(\d+)", f.read())
+            ver = m.group(1) if m else None
+    except OSError:
+        pass
+    if not ver:
+        return
+    path = os.path.join(os.path.dirname(OUT_DIR), "version.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"version": ver}, f)
+    if verbose:
+        print("   version.json 版 {}".format(ver))
+
+
 def write(payload, verbose=True):
     n = _write_json("latest.json", payload)
+    _write_version(verbose)
     if verbose:
         d = os.path.join(OUT_DIR, "directory.json")
         print("   latest.json {:.0f} KB / directory.json {:.0f} KB".format(
