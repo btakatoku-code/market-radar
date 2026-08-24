@@ -285,3 +285,4 @@
 {"date": "2026-08-24", "ts": 1787532354, "key": "AUDJPY=X", "name": "豪ドル/円", "bucket": "fx_watch", "horizon": 1, "price": 113.83300018310547, "pred": -0.0001541032472040056, "prob": 0.5005843445895604, "rank": null, "due": 1787618754, "actual": null}
 {"date": "2026-08-24", "ts": 1787532886, "key": "4689.T", "name": "LINEヤフー", "bucket": "top5", "horizon": 21, "price": 542.9, "pred": 0.012065154434739885, "prob": 0.530293618749552, "rank": 5, "due": 1790038486, "actual": null}
 {"date": "2026-08-24", "ts": 1787532886, "key": "5713.T", "name": "住友金属鉱山", "bucket": "category", "horizon": 21, "price": 11360.0, "pred": 0.026991403088115, "prob": 0.530293618749552, "rank": 2, "due": 1790038486, "actual": null}
+{"date": "2026-08-24", "ts": 1787543159, "key": "2253.T", "name": "グローバルX スーパーディビィデンド-US ETF", "bucket": "category", "horizon": 21, "price": 1354.0, "pred": 0.00703349498616247, "prob": 0.5603977923565553, "rank": 3, "due": 1790048759, "actual": null}
