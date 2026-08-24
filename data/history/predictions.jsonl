@@ -338,3 +338,5 @@
 {"date": "2026-08-25", "ts": 1787599360, "key": "USDJPY=X", "name": "米ドル/円", "bucket": "fx_watch", "horizon": 1, "price": 159.1959991455078, "pred": -0.0017960823297037288, "prob": 0.5563597599160384, "rank": null, "due": 1787685760, "actual": null}
 {"date": "2026-08-25", "ts": 1787606443, "key": "DASH", "name": "ドアダッシュ", "bucket": "top5", "horizon": 21, "price": 229.06, "pred": 0.010329999251538477, "prob": 0.5300209267563528, "rank": 4, "due": 1790112043, "actual": null}
 {"date": "2026-08-25", "ts": 1787606443, "key": "AMGN", "name": "アムジェン", "bucket": "category", "horizon": 21, "price": 443.84, "pred": 0.010467371310824288, "prob": 0.5300209267563528, "rank": 2, "due": 1790112043, "actual": null}
+{"date": "2026-08-25", "ts": 1787613353, "key": "9506.T", "name": "東北電力", "bucket": "top5", "horizon": 21, "price": 1309.5, "pred": 0.008262566473590818, "prob": 0.5299821840660983, "rank": 3, "due": 1790118953, "actual": null}
+{"date": "2026-08-25", "ts": 1787613353, "key": "5713.T", "name": "住友金属鉱山", "bucket": "category", "horizon": 21, "price": 11475.0, "pred": 0.027083026320173592, "prob": 0.5299821840660983, "rank": 2, "due": 1790118953, "actual": null}
