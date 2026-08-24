@@ -21,6 +21,7 @@ import costs
 import dataset
 import events
 import fx as fxmod
+import fxrisk
 import rates as ratesmod
 import market
 import risk
@@ -418,6 +419,16 @@ def build(use_cache=False, verbose=True):
     pool_fx = analog.build_pool(fx_assets, config.HORIZON_FX)
     rate_series = ratesmod.load()
     fx_signals = fxmod.signals(fx_assets, pool_fx, rate_series=rate_series)
+    # ポジション全体の診断。円換算の金額は資金設定に依存するので、
+    # 割合だけを返してアプリ側で掛け算する。
+    fx_portfolio = fxrisk.diagnose(
+        [s for s in fx_signals if s["tradeable"]], fx_assets,
+        config.FX_CAPITAL_JPY, config.FX_RISK_PER_TRADE,
+        config.FX_RISK_PER_TRADE * 2)
+    fx_portfolio_all = fxrisk.diagnose(
+        fx_signals, fx_assets, config.FX_CAPITAL_JPY,
+        config.FX_RISK_PER_TRADE, config.FX_RISK_PER_TRADE * 2)
+
     fx_plan = fxmod.plan()
     fx_plan["lines"] = fxmod.summary_lines(fx_plan)
     fx_by_key = {a["key"]: a for a in fx_assets}
@@ -535,7 +546,9 @@ def build(use_cache=False, verbose=True):
         "top5": top5, "pinned": pinned, "categories": categories,
         "missing_required": missing_required,
         "diversification": diversification,
-        "fx": {"signals": fx_signals, "plan": fx_plan},
+        "fx": {"signals": fx_signals, "plan": fx_plan,
+               "portfolio": fx_portfolio,
+               "portfolio_all": fx_portfolio_all},
         "context": context, "regime": snap,
         "fear_greed": fng[0] if fng else None,
         "accuracy": acc_live,

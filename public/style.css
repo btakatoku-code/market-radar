@@ -275,3 +275,57 @@ main{padding:14px 12px 8px;max-width:720px;margin:0 auto}
 .set-grid select{background:var(--card2);border:1px solid var(--line);color:var(--tx);
   border-radius:9px;padding:9px 8px;font-size:12.5px;font-weight:600;width:100%}
 .set-grid select:focus{outline:none;border-color:var(--accent)}
+
+/* ---- ポジション全体の診断 ----
+   色は色覚特性の検証を通したものだけを使う（validate_palette.js）。
+   買い越し/売り越し ΔE 19.7、相関の同/逆 ΔE 29.0（基準は8以上）。 */
+:root{
+  --pf-long:#1fae86;    /* 買い越し */
+  --pf-short:#9560e0;   /* 売り越し */
+  --pf-same:#c8842a;    /* 相関プラス（同じ向き＝集中） */
+  --pf-opp:#5b8cff;     /* 相関マイナス（逆向き＝打ち消し） */
+  --pf-zero:#2a3352;    /* 相関ゼロ付近 */
+}
+.pf-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 4px}
+.pf-tile{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 11px}
+.pf-tile .k{font-size:11.5px;color:var(--tx3);display:block;margin-bottom:2px}
+.pf-tile .v{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.pf-tile .u{font-size:11.5px;color:var(--tx3);margin-left:3px;font-weight:400}
+.pf-tile.alert{border-color:rgba(255,182,72,.45)}
+.pf-tile.alert .v{color:var(--warn)}
+
+/* 通貨エクスポージャー：ゼロを中心に左右へ伸ばす */
+.pf-exp{margin:12px 0 2px}
+.pf-exp-row{display:grid;grid-template-columns:62px 1fr 52px;align-items:center;
+  gap:8px;margin-bottom:6px;font-size:12.5px}
+.pf-exp-nm{color:var(--tx2);text-align:right;white-space:nowrap}
+.pf-exp-track{position:relative;height:18px;background:var(--bg2);border-radius:5px}
+.pf-exp-track::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;
+  width:1px;background:var(--line)}
+.pf-exp-bar{position:absolute;top:2px;height:14px;border-radius:4px}
+.pf-exp-bar.long{left:50%;background:var(--pf-long)}
+.pf-exp-bar.short{right:50%;background:var(--pf-short)}
+.pf-exp-val{font-variant-numeric:tabular-nums;font-size:12px}
+.pf-axis{display:grid;grid-template-columns:62px 1fr 52px;gap:8px;
+  font-size:10.5px;color:var(--tx3);margin-top:-2px}
+.pf-axis span:nth-child(2){display:flex;justify-content:space-between}
+
+/* 相関行列 */
+.pf-mx{display:grid;gap:2px;margin:10px 0 2px;font-size:10.5px}
+.pf-mx div{display:flex;align-items:center;justify-content:center;
+  border-radius:4px;min-height:34px;padding:2px;text-align:center;line-height:1.15}
+.pf-mx .hd{color:var(--tx3);background:none;min-height:26px;font-size:10px}
+.pf-mx .rw{color:var(--tx2);background:none;justify-content:flex-end;
+  padding-right:5px;font-size:10px}
+.pf-mx .cell{font-variant-numeric:tabular-nums;color:var(--tx);font-weight:600}
+.pf-mx .cell.self{background:var(--bg2);color:var(--tx3);font-weight:400}
+.pf-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--tx3);
+  margin-top:8px;flex-wrap:wrap}
+.pf-legend .sw{width:13px;height:13px;border-radius:3px;display:inline-block;
+  vertical-align:-2px;margin-right:4px}
+.pf-warn{list-style:none;margin:10px 0 0;padding:10px 12px;border-radius:10px;
+  background:rgba(255,182,72,.08);border:1px solid rgba(255,182,72,.3)}
+.pf-warn li{font-size:12.5px;color:var(--tx);margin-bottom:7px;padding-left:16px;
+  position:relative;line-height:1.55}
+.pf-warn li:last-child{margin-bottom:0}
+.pf-warn li::before{content:"！";position:absolute;left:0;color:var(--warn);font-weight:700}

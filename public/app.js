@@ -841,6 +841,107 @@ function viewHold(d) {
 }
 
 /* ---------- FX ---------- */
+
+/* ---------- ポジション全体の診断 ----------
+   主要5ペアのうち4つは円クロスで値動きが揃う。各シグナルを独立に建てると、
+   分散したつもりで同じ賭けを重ねることになる。それを数字と図で示す。
+
+   色は検証を通したものだけを使う（色覚特性でも区別できることを確認済み）。 */
+const PF_SHORT = {
+  '米ドル/円': 'ドル円', 'ユーロ/円': 'ユロ円', 'ポンド/円': 'ポンド円',
+  '豪ドル/円': '豪ドル円', 'ユーロ/米ドル': 'ユロドル', 'NZドル/円': 'NZ円',
+  'カナダドル/円': 'カナダ円', 'スイスフラン/円': 'スイス円',
+};
+const pfShort = n => PF_SHORT[n] || String(n || '').replace('/', '');
+
+// 相関の強さを色に変換する。0付近は目立たせず、±1に近づくほど濃くする。
+function corrColor(c) {
+  const t = Math.min(Math.abs(c), 1);
+  if (t < 0.12) return 'var(--pf-zero)';
+  const hue = c > 0 ? '200,132,42' : '91,140,255';
+  return `rgba(${hue},${(0.18 + t * 0.72).toFixed(2)})`;
+}
+
+function pfBlock(pf, st, title, note) {
+  if (!pf || !pf.count) return '';
+  const cap = st.capital || 0;
+  const worstYen = Math.round(cap * pf.worst_total_risk);
+  const sugYen = Math.round(cap * pf.suggested_per_trade);
+  const concentrated = pf.count >= 2 && pf.effective_bets < pf.count * 0.6;
+
+  const tiles = `<div class="pf-tiles">
+    <div class="pf-tile"><span class="k">建てる本数</span>
+      <span class="v">${pf.count}<span class="u">本</span></span></div>
+    <div class="pf-tile ${concentrated || pf.offsetting ? 'alert' : ''}">
+      <span class="k">実質の賭けの数</span>
+      <span class="v">${pf.offsetting ? '—' : pf.effective_bets.toFixed(1)}<span class="u">${
+        pf.offsetting ? '打ち消し合い' : '本ぶん'}</span></span></div>
+    <div class="pf-tile ${pf.worst_total_risk > pf.risk_budget * 1.2 ? 'alert' : ''}">
+      <span class="k">全部やられたら</span>
+      <span class="v">${yen(worstYen)}<span class="u">${(pf.worst_total_risk * 100).toFixed(1)}%</span></span></div>
+    <div class="pf-tile ${pf.reduce_needed ? 'alert' : ''}"><span class="k">推奨 1本あたり</span>
+      <span class="v">${(pf.suggested_per_trade * 100).toFixed(1)}<span class="u">% · ${yen(sugYen)}</span></span></div>
+  </div>`;
+
+  const maxShare = Math.max(...pf.exposure.map(e => e.share), 0.001);
+  const exp = pf.exposure.length ? `<div class="pf-exp">
+    ${pf.exposure.map(e => {
+      const w = (e.net > 0 ? 1 : -1);
+      const pct2 = (e.share / maxShare) * 50;
+      return `<div class="pf-exp-row" title="${esc(e.name)} ${esc(e.side)} ${(e.share * 100).toFixed(0)}%">
+        <span class="pf-exp-nm">${esc(e.name)}</span>
+        <span class="pf-exp-track"><span class="pf-exp-bar ${w > 0 ? 'long' : 'short'}"
+          style="width:${pct2.toFixed(1)}%"></span></span>
+        <span class="pf-exp-val ${w > 0 ? '' : ''}">${(e.share * 100).toFixed(0)}%</span>
+      </div>`;
+    }).join('')}
+    <div class="pf-axis"><span></span><span><span>← 売り越し</span><span>買い越し →</span></span><span></span></div>
+  </div>` : '';
+
+  const keys = [...new Set(pf.matrix.flatMap(m => [m.a, m.b]))];
+  const nm = {};
+  (DATA.fx.signals || []).forEach(x => { nm[x.key] = x.name; });
+  const get = (a, b) => {
+    if (a === b) return null;
+    const m = pf.matrix.find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+    return m ? m.corr : 0;
+  };
+  const mx = keys.length >= 2 ? `<div class="pf-mx"
+    style="grid-template-columns:46px repeat(${keys.length},1fr)">
+    <div class="hd"></div>${keys.map(k => `<div class="hd">${esc(pfShort(nm[k] || k))}</div>`).join('')}
+    ${keys.map(a => `<div class="rw">${esc(pfShort(nm[a] || a))}</div>${
+      keys.map(b => {
+        const c = get(a, b);
+        if (c === null) return '<div class="cell self">—</div>';
+        return `<div class="cell" style="background:${corrColor(c)}"
+          title="${esc(pfShort(nm[a] || a))} と ${esc(pfShort(nm[b] || b))}: 相関 ${c >= 0 ? '+' : ''}${c.toFixed(2)}">${
+          c >= 0 ? '+' : ''}${c.toFixed(2)}</div>`;
+      }).join('')}`).join('')}
+  </div>
+  <div class="pf-legend">
+    <span><span class="sw" style="background:var(--pf-same)"></span>同じ向きに動く</span>
+    <span><span class="sw" style="background:var(--pf-zero)"></span>関係が薄い</span>
+    <span><span class="sw" style="background:var(--pf-opp)"></span>逆向きに動く</span>
+    <span>直近120営業日</span>
+  </div>` : '';
+
+  const warn = (pf.warnings || []).length
+    ? `<ul class="pf-warn">${pf.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
+
+  return `<div class="card"><h2>${esc(title)}</h2>
+    ${note ? `<p class="muted" style="margin:0 0 4px">${esc(note)}</p>` : ''}
+    ${tiles}
+    <h3 style="margin:14px 0 4px;font-size:13.5px">通貨ごとの正味の持ち高</h3>
+    <p class="muted" style="margin:0 0 6px;font-size:12px">
+      ペアを通貨に分解して足し合わせた結果です。何に賭けているかはここに出ます。</p>
+    ${exp}
+    <h3 style="margin:16px 0 4px;font-size:13.5px">ペア同士の連動</h3>
+    <p class="muted" style="margin:0 0 6px;font-size:12px">
+      数字が大きいほど同じ値動きをします。＋0.7を超える組は、実質ひとつの取引です。</p>
+    ${mx}
+    ${warn}</div>`;
+}
+
 function viewFx(d) {
   const base = d.fx && d.fx.plan;
   if (!base) return '<p class="empty">FXデータがありません</p>';
@@ -953,6 +1054,9 @@ function viewFx(d) {
     lv && lv.reliable === false ? '<b class="down">この区分は振れ幅が大きく、当てにできません。</b>' : ''}
     それ未満のペアは参考表示です。スプレッドは未計上です。</div>
     ${settingsCard}${plan}
+    ${pfBlock(d.fx.portfolio, st, 'ポジション全体の診断', 'いま売買条件を満たしているシグナルを、全部建てた場合の姿です。')}
+    ${(d.fx.portfolio_all && d.fx.portfolio_all.count > (d.fx.portfolio ? d.fx.portfolio.count : 0))
+      ? pfBlock(d.fx.portfolio_all, st, '参考：5ペア全部を建てた場合', '確信度が届いていないものも含めて全部建てると、こうなります。') : ''}
     <div class="card"><h2>主要5ペア（${esc(d.horizon_fx_label || '')}先）</h2>
       <div class="row"><span class="muted">売買条件を満たしているペア</span>
         <span class="num"><strong class="${nTrade ? 'up' : ''}">${nTrade}</strong> / ${all.length}</span></div>
