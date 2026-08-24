@@ -5,6 +5,7 @@ let BASE_LONG = null, BASE_FX = null;   // 何もせず買った場合の上昇�
 let DIR = null, DIR_LOADING = false;    // 銘柄索引（保有タブでだけ使う・別ファイル）
 let HOLD_Q = '';                        // 銘柄検索の入力
 let HOLD_TAB = 'stock';                 // 保有タブ内の切り替え（株 / FX）
+let SWAP_OPEN = false;                  // スワップ設定欄を開いたままにするか
 
 /* 索引は600件近くあり本体に含めると重いので、保有タブを開いたときだけ取りに行く。 */
 async function loadDirectory() {
@@ -919,6 +920,18 @@ function preTradeCheck(sig, st) {
       t: clash.length ? '値動きが連動する建玉あり' : '建玉との重複なし',
       d: clash.length ? clash.map(clashText).join(' ')
         : 'いまの建玉と値動きが揃うものはありません。' },
+    (() => {
+      const sp = swapPct(st, sig.key, sig.direction, sig.entry, qty);
+      const per10k = swapOf(st, sig.key, sig.direction);
+      if (sp == null) return { ok: false, t: 'スワップ未設定',
+        d: '24時間保有では必ず発生します。設定に入れるまで、この費用は計算に入っていません。' };
+      const yenDay = per10k * ((qty || 0) / 10000);
+      return { ok: sp >= 0 || Math.abs(sp) < edge * 0.3,
+        t: `スワップ ${sp >= 0 ? '受け取り' : '支払い'} ${yen(Math.round(Math.abs(yenDay)))}／日`,
+        d: `想定元本の${(sp * 100).toFixed(4)}%。実測の1回あたりの利益${
+          (edge * 100).toFixed(3)}%に対して${(Math.abs(sp) / edge * 100).toFixed(0)}%です。`
+          + (sp < 0 ? ' 差し引くと' + ((edge + sp) * 100).toFixed(3) + '%になります。' : '') };
+    })(),
     { ok: worstAfter <= budget * 1.05,
       t: `建てた後の合計リスク ${(worstAfter * 100).toFixed(1)}%`,
       d: `${(worstBefore * 100).toFixed(1)}% → ${(worstAfter * 100).toFixed(1)}%（${
@@ -945,6 +958,65 @@ function preTradeCheck(sig, st) {
     <p class="muted" style="margin-top:9px">通貨量は、資金${yen(cap)}の${
       ((st.risk || 0.02) * 100).toFixed(1)}%を損切りで失う大きさとして計算しています。
       資金設定を変えるとこの数字も変わります。</p></details>`;
+}
+
+
+/* ---------- スワップポイント ----------
+   FXの予測期間は24時間なので、必ず日をまたぐ＝毎回スワップが発生する。
+   値は業者ごとに違い、無料で取れる短期金利も米国のものだけなので、
+   推測はしない。設定に入れてもらい、入っていなければ「未計上」と明示する。 */
+function swapOf(st, key, side) {
+  const t = (st.swap || {})[key];
+  if (!t) return null;
+  const v = side === '買い' ? t.buy : t.sell;
+  return (v === null || v === undefined || v === '') ? null : Number(v);
+}
+// 想定元本（円）に対する1日あたりの割合
+function swapPct(st, key, side, price, qty) {
+  const per10k = swapOf(st, key, side);
+  if (per10k == null || !price || !qty) return null;
+  const legs = fxLegs(key);
+  const rate = (DATA.usdjpy && DATA.usdjpy.rate) || null;
+  const conv = !legs ? null : legs[1] === 'JPY' ? 1 : (legs[1] === 'USD' ? rate : null);
+  if (!conv) return null;
+  const notional = qty * price * conv;
+  const yenPerDay = per10k * (qty / 10000);
+  return notional ? yenPerDay / notional : null;
+}
+
+function swapSettingsCard(st) {
+  const sigs = (DATA.fx && DATA.fx.signals) || [];
+  const sw = st.swap || {};
+  const unset = sigs.filter(x => swapOf(st, x.key, '買い') == null
+    || swapOf(st, x.key, '売り') == null).length;
+  const sens = (DATA.fx_swap && DATA.fx_swap.sensitivity) || [];
+  return `<details class="detail" ${unset || SWAP_OPEN ? 'open' : ''}>
+    <summary>スワップの設定（${unset ? `未設定 ${unset}ペア` : '設定済み'}）</summary>
+    <p class="muted" style="margin:8px 0">
+      FXの予測期間は24時間なので<b>必ず日をまたぎます</b>。つまりスワップが毎回発生します。
+      値は業者ごとに違うため、こちらでは推測しません。
+      ご利用の業者が公表している<b>1万通貨あたり1日の金額</b>を入れてください。
+      受け取りは＋、支払いは−で入力します。</p>
+    ${sigs.map(x => `<div class="pf-exp-row" style="grid-template-columns:78px 1fr 1fr">
+      <span class="pf-exp-nm">${esc(x.name)}</span>
+      <label style="font-size:11px;color:var(--tx3)">買い
+        <input class="sw-in" data-sw="${esc(x.key)}" data-side="buy" type="number"
+          inputmode="numeric" step="1" placeholder="＋140"
+          value="${(sw[x.key] && sw[x.key].buy != null) ? sw[x.key].buy : ''}"></label>
+      <label style="font-size:11px;color:var(--tx3)">売り
+        <input class="sw-in" data-sw="${esc(x.key)}" data-side="sell" type="number"
+          inputmode="numeric" step="1" placeholder="−190"
+          value="${(sw[x.key] && sw[x.key].sell != null) ? sw[x.key].sell : ''}"></label>
+    </div>`).join('')}
+    ${unset && sens.length ? `<p class="muted" style="margin-top:10px">
+      未設定のあいだ、この費用は計算に入っていません。目安として、
+      ${sens.map(v => `1日${(v.swap_pct * 100).toFixed(3)}%なら実測の優位性の${
+        (v.share * 100).toFixed(0)}%`).join('、')}が消えます。</p>` : ''}
+    ${(DATA.fx_swap && DATA.fx_swap.us_short_rate) ? `<p class="muted" style="font-size:11.5px">
+      参考：米国の短期金利は${DATA.fx_swap.us_short_rate.toFixed(2)}%です。
+      金利差だけの理屈値は業者の上乗せを含まないので、実際の受け取りはこれより少なく、
+      支払いはこれより多くなるのが普通です。</p>` : ''}
+  </details>`;
 }
 
 /* ---------- FXの建玉とリスク計算 ----------
@@ -1099,12 +1171,18 @@ function fxMark(p, st) {
   const toStop = (cur != null && p.stop) ? Math.abs(cur - p.stop) / cur : null;
   const toTarget = (cur != null && p.target) ? Math.abs(cur - p.target) / cur : null;
   const riskJpy = toJpy(p.stop ? Math.abs(p.entry - p.stop) * p.qty : null);
+  // 建ててからの日数ぶんのスワップ。24時間保有でも1日ぶんは必ず付く。
+  const per10k = swapOf(st, p.key, p.side);
+  const days = p.opened
+    ? Math.max(1, Math.round((Date.now() - new Date(p.opened).getTime()) / 86400000))
+    : 1;
+  const swapJpy = per10k == null ? null : per10k * (p.qty / 10000) * days;
   const hit = p.stop != null && cur != null &&
     (sign > 0 ? cur <= p.stop : cur >= p.stop);
   const won = p.target != null && cur != null &&
     (sign > 0 ? cur >= p.target : cur <= p.target);
   return { sig, cur, pl, costJpy, toStop, toTarget, riskJpy, hit, won, sign,
-    agree: sig ? (sig.direction === p.side) : null };
+    swapJpy, days, agree: sig ? (sig.direction === p.side) : null };
 }
 
 
@@ -1140,6 +1218,9 @@ function fxHoldBlock(st) {
     if (m.agree === true && m.sig && m.sig.confidence >= st.fxConf)
       notes.push(`いまのモデルも同じ${esc(m.sig.direction)}を示しています`
         + `（確信度${(m.sig.confidence * 100).toFixed(0)}%）。`);
+    if (m.swapJpy == null)
+      notes.push('スワップが未設定です。24時間以上持つと必ず発生するので、'
+        + '損益はその分ずれています。FXタブの「スワップ」で設定できます。');
     if (m.pl != null && m.costJpy != null && m.pl > 0 && m.pl < m.costJpy)
       notes.push(`含み益${yen(Math.round(m.pl))}は往復コスト${yen(Math.round(m.costJpy))}`
         + 'をまだ取り返していません。');
@@ -1164,6 +1245,12 @@ function fxHoldBlock(st) {
           <span class="v">${m.riskJpy != null ? yen(Math.round(m.riskJpy)) : '—'}</span></div>
         <div class="metric"><span class="k">往復コスト</span>
           <span class="v">${m.costJpy != null ? yen(Math.round(m.costJpy)) : '—'}</span></div>
+        <div class="metric"><span class="k">スワップ（${m.days}日）</span>
+          <span class="v ${m.swapJpy == null ? '' : cls(m.swapJpy)}">${
+            m.swapJpy == null ? '未設定' : yen(Math.round(m.swapJpy))}</span></div>
+        <div class="metric"><span class="k">スワップ込み</span>
+          <span class="v ${m.swapJpy == null ? '' : cls((m.pl || 0) + m.swapJpy)}">${
+            m.swapJpy == null ? '—' : yen(Math.round((m.pl || 0) + m.swapJpy))}</span></div>
       </div>
       ${notes.length ? `<ul class="pf-warn" style="margin-top:10px">${
         notes.map(t => `<li>${t}</li>`).join('')}</ul>` : ''}
@@ -1414,7 +1501,9 @@ function viewFx(d) {
     標本ごとの振れ幅は${(lv.spread * 100).toFixed(1)}ポイントです。` : ''}${
     lv && lv.reliable === false ? '<b class="down">この区分は振れ幅が大きく、当てにできません。</b>' : ''}
     それ未満のペアは参考表示です。スプレッドは未計上です。</div>
-    ${settingsCard}${plan}
+    ${settingsCard}
+    <div class="card"><h2>スワップ（金利差の受け払い）</h2>${swapSettingsCard(st)}</div>
+    ${plan}
     ${pfBlock(d.fx.portfolio, st, 'ポジション全体の診断', 'いま売買条件を満たしているシグナルを、全部建てた場合の姿です。')}
     ${(d.fx.portfolio_all && d.fx.portfolio_all.count > (d.fx.portfolio ? d.fx.portfolio.count : 0))
       ? pfBlock(d.fx.portfolio_all, st, '参考：5ペア全部を建てた場合', '確信度が届いていないものも含めて全部建てると、こうなります。') : ''}
@@ -1455,6 +1544,50 @@ function viewFx(d) {
 }
 
 /* ---------- 的中率 ---------- */
+
+/* ---------- 優位性が消えていないかの監視 ----------
+   検証で確認できた優位性は、いつまでも続く保証がない。問題は
+   「消えたことにいつ気づくか」で、後から基準を決めると都合よく
+   解釈できてしまう。だから基準は実績を見る前に固定してある。 */
+function monitorCard(d) {
+  const m = d.fx_monitor, r = d.monitor_rules;
+  if (!m || !r) return '';
+  const tone = { ok: 'up', watch: '', below: 'warn', stop: 'down',
+    not_enough: '' }[m.verdict] || '';
+  const pillCls = { ok: 'ok', watch: 'wa', below: 'wa', stop: 'no',
+    not_enough: '' }[m.verdict] || '';
+  const prog = Math.min(100, (m.n / r.min_samples) * 100);
+  return `<div class="card"><h2>優位性が続いているかの監視</h2>
+    <div class="row"><span class="big ${tone}">${esc(m.label)}</span>
+      <span class="pill ${pillCls}">${m.n} / ${r.min_samples} 件</span></div>
+    <p class="muted" style="margin:6px 0 10px">${esc(m.detail)}</p>
+    ${m.n < r.min_samples ? `<div class="pf-exp-track" style="height:8px">
+      <span class="pf-exp-bar long" style="left:0;width:${prog.toFixed(0)}%;height:6px"></span></div>
+      <p class="muted" style="font-size:11.5px;margin:6px 0 0">
+        判定できるまであと${r.min_samples - m.n}件です。</p>` : ''}
+    <div class="metrics" style="margin-top:12px">
+      <div class="metric"><span class="k">実績の的中率</span>
+        <span class="v ${m.hit != null && m.hit >= m.expected ? 'up' : ''}">${
+          m.hit != null ? (m.hit * 100).toFixed(1) + '%' : '—'}</span></div>
+      <div class="metric"><span class="k">検証での想定</span>
+        <span class="v">${(m.expected * 100).toFixed(1)}%</span></div>
+      <div class="metric"><span class="k">95%区間</span>
+        <span class="v">${m.n ? (m.ci_low * 100).toFixed(0) + '〜' + (m.ci_high * 100).toFixed(0) + '%' : '—'}</span></div>
+      <div class="metric"><span class="k">下回る確率</span>
+        <span class="v">${m.p_value != null ? m.p_value.toFixed(3) : '—'}</span></div>
+    </div>
+    <details class="detail" style="margin-top:10px"><summary>先に決めてある基準</summary>
+      <div class="scroll-x"><table class="tbl">
+        <tr><td>対象</td><td>${esc(r.target)}</td></tr>
+        <tr><td>想定する的中率</td><td>${(r.expected * 100).toFixed(1)}%</td></tr>
+        <tr><td>判定に要る件数</td><td>${r.min_samples}件</td></tr>
+        <tr><td>警告を出す条件</td><td>想定を下回る確率が${r.alarm_p}未満</td></tr>
+        <tr><td>停止を検討する条件</td><td>95%区間の上端が${(r.stop_upper * 100).toFixed(0)}%を下回る</td></tr>
+        <tr><td>基準を決めた日</td><td>${esc(r.fixed_at)}</td></tr>
+      </table></div>
+      <p class="muted" style="margin-top:8px">${esc(r.note)}</p></details></div>`;
+}
+
 function viewAcc(d) {
   const a = d.accuracy || {}, v = VALID;
   const stat = (s, label) => {
@@ -1662,7 +1795,7 @@ function viewAcc(d) {
 
   const cav = v.caveats.map(c => `<li style="margin-bottom:5px">${esc(c)}</li>`).join('');
 
-  return live + prog + cmp + costCard + `
+  return monitorCard(d) + live + prog + cmp + costCard + `
   <div class="banner"><strong>事前検証の結論</strong>
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
@@ -1691,6 +1824,21 @@ function render() {
 }
 
 function bindSettings() {
+  // スワップの入力。FXタブにあるので、ここで拾う。
+  // 再描画すると開いていた欄が閉じてしまうので、値の保存だけ行い描画し直す。
+  document.querySelectorAll('.sw-in').forEach(inp =>
+    inp.addEventListener('change', () => {
+      const st = settings();
+      st.swap = st.swap || {};
+      const k = inp.dataset.sw;
+      st.swap[k] = st.swap[k] || {};
+      const v = String(inp.value).trim();
+      st.swap[k][inp.dataset.side] = v === '' ? null : Number(v);
+      saveSettings(st);
+      SWAP_OPEN = true;      // 設定欄は開いたままにする
+      render();
+    }));
+
   const apply = () => {
     const s = settings();
     const g = id => { const v = parseFloat($('#' + id).value); return v > 0 ? v : null; };

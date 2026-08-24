@@ -22,6 +22,8 @@ import dataset
 import events
 import fx as fxmod
 import fxrisk
+import monitor
+import swap as swapmod
 import rates as ratesmod
 import market
 import risk
@@ -586,7 +588,20 @@ def build(use_cache=False, verbose=True):
         "fx_signal_pairs": len(config.FX_SIGNAL_PAIRS),
         "fx_pool_pairs": len(fx_assets),
         "fx_confirmed": fxmod.CONFIRMED,
+        "fx_monitor": monitor.check(
+            round(((acc_live.get("fx") or {}).get("hit_rate") or 0)
+                  * ((acc_live.get("fx") or {}).get("n") or 0)),
+            (acc_live.get("fx") or {}).get("n") or 0,
+            fxmod.MEASURED["hit_rate"]),
+        "monitor_rules": monitor.RULES,
         "fx_corr": fx_corr_out,
+        "fx_swap": {
+            "us_short_rate": swapmod.us_short_rate(),
+            "sensitivity": swapmod.sensitivity(fxmod.MEASURED["edge_per_trade"]),
+            "note": ("FXの予測期間は24時間なので、必ず日をまたぎます。"
+                     "つまりスワップが毎回発生します。値は業者ごとに違うため、"
+                     "推測はせず、設定に入れてもらう形にしています。"),
+        },
         "fx_spread": {k: v for k, v in fxmod.SPREAD.items()},
         "fx_max_leverage": fxmod.MAX_LEVERAGE,
         "fx_levels": fxmod.CONFIDENCE_LEVELS,
