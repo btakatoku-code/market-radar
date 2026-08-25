@@ -6,7 +6,9 @@ let DIR = null, DIR_LOADING = false;    // 銘柄索引（保有タブでだけ�
 let HOLD_Q = '';                        // 銘柄検索の入力
 let HOLD_TAB = 'stock';                 // 保有タブ内の切り替え（株 / FX）
 // フィボナッチの効果についての説明。検証結果に合わせて書き換える。
-const FIB_NOTE = '的中率との関係は検証中です。';
+const FIB_NOTE = '的中率が上がる関係は確認できませんでした。波を取る本数を'
+  + '1段変えると効果が消えるためです（60本では効くが30本・120本で崩れる）。'
+  + '絞り込みには使わず、判断の材料として水準だけを出しています。';
 let SWAP_OPEN = false;                  // スワップ設定欄を開いたままにするか
 
 /* 索引は600件近くあり本体に含めると重いので、保有タブを開いたときだけ取りに行く。 */
@@ -1748,6 +1750,32 @@ function viewAcc(d) {
     <ul style="font-size:12.5px;color:var(--tx2);padding-left:18px;margin:10px 0 0">
     ${v.rates.conclusions.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>` : '';
 
+  // フィボナッチ。表示はするが効果は確認できなかった、という記録。
+  const fb = v.fibonacci;
+  const fibCard = fb ? `<div class="card"><h2>${esc(fb.title)}</h2>
+    <p class="muted" style="margin-bottom:10px">${esc(fb.summary)}</p>
+    <div class="scroll-x"><table class="tbl">
+    <tr><th>条件</th><th>標本0</th><th>標本1</th><th>標本2</th><th>平均</th><th>件数</th></tr>
+    ${fb.rows.map(r => `<tr><td>${esc(r.name)}</td>
+      <td class="num">${(r.o0 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.o1 * 100).toFixed(1)}%</td>
+      <td class="num">${(r.o2 * 100).toFixed(1)}%</td>
+      <td class="num"><b>${(r.avg * 100).toFixed(1)}%</b></td>
+      <td class="num">${r.n}件</td></tr>`).join('')}
+    </table></div>
+    <h3 style="margin:14px 0 6px;font-size:13.5px">${esc(fb.sensitivity.title)}</h3>
+    <div class="scroll-x"><table class="tbl">
+    <tr><th>波の本数</th><th>水準に近いとき</th><th>条件なし</th></tr>
+    ${fb.sensitivity.rows.map(r => {
+      const bad = r.near.some((v, i) => v < r.base[i]);
+      return `<tr><td>${r.lookback}本${r.lookback === 60 ? ' <span class="pill">採用中の設定</span>' : ''}</td>
+      <td class="num ${bad ? 'down' : 'up'}">${r.near.map(v => (v * 100).toFixed(1)).join(' / ')}%</td>
+      <td class="num muted">${r.base.map(v => (v * 100).toFixed(1)).join(' / ')}%</td></tr>`;
+    }).join('')}
+    </table></div>
+    <p class="muted" style="margin-top:8px">${esc(fb.sensitivity.note)}</p>
+    <p class="muted" style="margin-top:8px">${esc(fb.note)}</p></div>` : '';
+
   const rules = T(v.stocks.title, 't値が2以上で統計的に有意。どのルールも頑健性検査を通りませんでした。',
     '<th>並べ替えルール</th><th>市場超過</th><th>t値</th>',
     v.stocks.rules.map(r => `<tr><td>${esc(r.name)}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ''}</td>
@@ -1838,7 +1866,7 @@ function viewAcc(d) {
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
     ${v.costs ? esc(v.costs.summary) : ''}</div>
-  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${gridCard}${cnf}${rateCard}${tim}${ind}${rej}${tv}
+  ${costTbl}${reg}${regWin}${rules}${caps}${split}${fxr}${psel}${psplit}${gridCard}${cnf}${rateCard}${fibCard}${tim}${ind}${rej}${tv}
   <div class="card"><h2>検証方法と注意点</h2>
     <p style="font-size:13px">${esc(v.method)}</p>
     <p class="muted">${esc(v.data_note)}</p>
