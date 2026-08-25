@@ -429,3 +429,4 @@
 {"date": "2026-08-26", "ts": 1787678637, "key": "ETHUSDT", "name": "イーサリアム", "bucket": "category", "horizon": 21, "price": 2461.6299, "pred": 0.0237259463947653, "prob": 0.5299526497034628, "rank": 3, "due": 1790184237, "actual": null}
 {"date": "2026-08-26", "ts": 1787678637, "key": "VT", "name": "バンガード トータル ワールド ストックETF", "bucket": "category", "horizon": 21, "price": 160.765, "pred": 0.004402464523261242, "prob": 0.5373420479302832, "rank": 3, "due": 1790184237, "actual": null}
 {"date": "2026-08-26", "ts": 1787685860, "key": "XRPUSDT", "name": "リップル", "bucket": "category", "horizon": 21, "price": 1.4754, "pred": 0.02816439865350884, "prob": 0.5299526497034628, "rank": 3, "due": 1790191460, "actual": null}
+{"date": "2026-08-26", "ts": 1787692744, "key": "DASH", "name": "ドアダッシュ", "bucket": "top5", "horizon": 21, "price": 233.5, "pred": 0.00832201143532829, "prob": 0.5298691356252542, "rank": 4, "due": 1790198344, "actual": null}
