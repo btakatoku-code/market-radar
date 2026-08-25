@@ -345,3 +345,5 @@
 {"date": "2026-08-25", "ts": 1787624038, "key": "9107.T", "name": "川崎汽船", "bucket": "category", "horizon": 21, "price": 3551.0, "pred": 0.012871501981291993, "prob": 0.5299329244234011, "rank": 1, "due": 1790129638, "actual": null}
 {"date": "2026-08-25", "ts": 1787624038, "key": "9101.T", "name": "日本郵船", "bucket": "category", "horizon": 21, "price": 7353.0, "pred": 0.01090626539027497, "prob": 0.5299329244234011, "rank": 3, "due": 1790129638, "actual": null}
 {"date": "2026-08-25", "ts": 1787635458, "key": "TGT", "name": "ターゲット", "bucket": "top5", "horizon": 21, "price": 169.89, "pred": 0.0098324057782423, "prob": 0.5299329244234011, "rank": 5, "due": 1790141058, "actual": null}
+{"date": "2026-08-25", "ts": 1787665319, "key": "FCX", "name": "フリーポート・マクモラン", "bucket": "category", "horizon": 21, "price": 77.9, "pred": 0.016706433845706005, "prob": 0.5416774170588706, "rank": 3, "due": 1790170919, "actual": null}
+{"date": "2026-08-25", "ts": 1787665319, "key": "VEA", "name": "バンガード FTSE先進国市場(除く米国)ETF", "bucket": "category", "horizon": 21, "price": 73.5, "pred": 0.0052826916350509805, "prob": 0.5373428928042727, "rank": 3, "due": 1790170919, "actual": null}
