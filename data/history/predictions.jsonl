@@ -344,3 +344,4 @@
 {"date": "2026-08-25", "ts": 1787624038, "key": "BDX", "name": "ベクトン・ディッキンソン", "bucket": "top5", "horizon": 21, "price": 190.74, "pred": 0.009414683060481242, "prob": 0.5299329244234011, "rank": 3, "due": 1790129638, "actual": null}
 {"date": "2026-08-25", "ts": 1787624038, "key": "9107.T", "name": "川崎汽船", "bucket": "category", "horizon": 21, "price": 3551.0, "pred": 0.012871501981291993, "prob": 0.5299329244234011, "rank": 1, "due": 1790129638, "actual": null}
 {"date": "2026-08-25", "ts": 1787624038, "key": "9101.T", "name": "日本郵船", "bucket": "category", "horizon": 21, "price": 7353.0, "pred": 0.01090626539027497, "prob": 0.5299329244234011, "rank": 3, "due": 1790129638, "actual": null}
+{"date": "2026-08-25", "ts": 1787635458, "key": "TGT", "name": "ターゲット", "bucket": "top5", "horizon": 21, "price": 169.89, "pred": 0.0098324057782423, "prob": 0.5299329244234011, "rank": 5, "due": 1790141058, "actual": null}
