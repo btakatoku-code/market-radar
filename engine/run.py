@@ -602,7 +602,9 @@ def build(use_cache=False, verbose=True):
                      "つまりスワップが毎回発生します。値は業者ごとに違うため、"
                      "推測はせず、設定に入れてもらう形にしています。"),
         },
-        "fx_spread": {k: v for k, v in fxmod.SPREAD.items()},
+        "fx_spread": {k: v[0] for k, v in fxmod.SPREAD_PRICE.items()},
+        "fx_spread_price": {k: list(v) for k, v in fxmod.SPREAD_PRICE.items()},
+        "fx_spread_source": fxmod.SPREAD_SOURCE,
         "fx_max_leverage": fxmod.MAX_LEVERAGE,
         "fx_levels": fxmod.CONFIDENCE_LEVELS,
         "fx_rate_retracted": fxmod.RATE_RETRACTED,

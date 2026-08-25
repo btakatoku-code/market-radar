@@ -5,6 +5,8 @@ let BASE_LONG = null, BASE_FX = null;   // 何もせず買った場合の上昇�
 let DIR = null, DIR_LOADING = false;    // 銘柄索引（保有タブでだけ使う・別ファイル）
 let HOLD_Q = '';                        // 銘柄検索の入力
 let HOLD_TAB = 'stock';                 // 保有タブ内の切り替え（株 / FX）
+// フィボナッチの効果についての説明。検証結果に合わせて書き換える。
+const FIB_NOTE = '的中率との関係は検証中です。';
 let SWAP_OPEN = false;                  // スワップ設定欄を開いたままにするか
 
 /* 索引は600件近くあり本体に含めると重いので、保有タブを開いたときだけ取りに行く。 */
@@ -200,6 +202,41 @@ function rsiChart(ic) {
       <text x="${plotW + 5}" y="${(Y(70) + 3.5).toFixed(1)}" class="ax">70</text>
       <text x="${plotW + 5}" y="${(Y(30) + 3.5).toFixed(1)}" class="ax">30</text>
     </svg>`;
+}
+
+
+/* ---------- フィボナッチの水準 ----------
+   プロが実際に見ている道具なので表示する。ただし「効く」とは書かない。
+   このアプリでは、テクニカルの裏付けと的中率に関係が見られなかった。
+   フィボナッチについても、測定結果が支持したときだけ効果を主張する。 */
+function fibBlock(f) {
+  if (!f || !f.levels || !f.levels.length) return '';
+  const px = f.price;
+  const up = f.swing.direction > 0;
+  const rows = f.levels.slice().sort((a, b) => b.price - a.price);
+  const near = f.nearest;
+  const line = l => {
+    const isNear = near && Math.abs(l.price - near.price) < 1e-9 && l.kind === near.kind;
+    return `<div class="fib-row ${l.kind === '延長' ? 'ext' : ''} ${isNear ? 'near' : ''}">
+      <span class="lb">${(l.ratio * 100).toFixed(1)}%</span>
+      <span class="ln"></span>
+      <span class="pv">${num(l.price, 4)}</span></div>`;
+  };
+  const above = rows.filter(l => l.price > px);
+  const below = rows.filter(l => l.price <= px);
+  return `<div class="fib">
+    <div class="fib-head">
+      <span>フィボナッチ（直近${f.lookback}本の${up ? '上昇' : '下降'}の波）</span>
+      <span class="muted">${num(f.swing.low, 4)} 〜 ${num(f.swing.high, 4)}</span>
+    </div>
+    ${above.map(line).join('')}
+    <div class="fib-now"><span class="lb">現在</span><span class="ln"></span>
+      <span class="pv">${num(px, 4)}</span></div>
+    ${below.map(line).join('')}
+    <p class="muted" style="font-size:11px;margin:7px 0 0">
+      ${near ? `最も近いのは${(near.ratio * 100).toFixed(1)}%の${esc(near.kind)}で、
+      いまの値段から${(near.distance * 100).toFixed(2)}%${near.above ? '上' : '下'}です。` : ''}
+      ${FIB_NOTE}</p></div>`;
 }
 
 function confirmBlock(c, tradeable) {
@@ -1468,6 +1505,7 @@ function viewFx(d) {
       ${macdChart(s.ind_chart)}
       ${rsiChart(s.ind_chart)}
       ${preTradeCheck(s, st)}
+      ${fibBlock(s.fib)}
       ${confirmBlock(s.confirm, on)}
       ${timingBlock(s.timing)}
       <div class="levels">

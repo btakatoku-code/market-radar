@@ -13,32 +13,36 @@ import time
 
 import analog
 import config
+import fibonacci
 
 # 検証で実測した優位性（tests/run_fx.py の結果）
 # 「各日の予測変動が大きい上位5ペアに、予測方向でエントリーした場合」
 # 市場レジーム（リスク許容度×市場の広がり／9段階）で類似局面を絞ったうえで、
 # 確信度56%以上のシグナルだけを採用した場合の実測値。
 MEASURED = {
-    # 検証時点の並びを1日ずつずらした、互いに重ならない3標本の平均。
-    # 以前は1標本だけで測っており 58.6% としていたが、それは高すぎた。
-    "hit_rate": 0.567,          # 方向的中率（53.7 / 57.8 / 58.5% の平均）
-    "hit_by_offset": [0.537, 0.578, 0.585],
-    "hit_spread": 0.048,        # 標本による振れ幅
-    "edge_per_trade": 0.00088,  # 1回あたりの平均損益（想定元本比）
-    "t_stat": 2.52,             # 日次集計のt値
-    "signals": 327,             # 1標本あたりの平均シグナル数（検証400時点）
-    "signals_per_day": 0.82,
+    # 外為オンラインの24ペアから選び直した5ペアでの実測。
+    # 検証時点の並びを1日ずつずらした、重ならない3標本の平均。
+    "hit_rate": 0.606,          # 63.1 / 60.6 / 58.0% の平均
+    "hit_by_offset": [0.631, 0.606, 0.580],
+    "hit_spread": 0.051,
+    "edge_per_trade": 0.00143,  # コスト前
+    "net_per_trade": 0.00089,   # 往復スプレッドを引いた後
+    "cost_per_trade": 0.00054,
+    "t_stat": 3.55,
+    "signals": 252,
+    "signals_per_day": 0.63,
     "period": "2021-11 〜 2026-08",
     "regime": "risk_breadth9",
     "pairs": 5,
-    "pool_pairs": 14,
+    "pool_pairs": 24,
     "test_days": 400,
     "samples": 3,
-    # レジームを外すと勝率は 55.7% とほぼ同じだが、シグナルが59件（0.15回/日）
-    # まで減り、t値も1.00で有意でなくなる。レジームの役割は的中率を上げることでは
-    # なく、使える回数のシグナルを出すこと。
-    "no_regime": {"hit_rate": 0.557, "signals": 59, "signals_per_day": 0.15,
-                  "t_stat": 1.00, "by_offset": [0.566, 0.556, 0.548]},
+    "broker": "外為オンライン 店頭FX（24通貨ペア）",
+    # 全予測ではコスト後 -0.024%。優位性は確信度の絞り込みからしか出ていない。
+    "all_predictions": {"hit_rate": 0.529, "mean": 0.00032, "net": -0.00024},
+    # 旧5ペア（米ドル/円・ユーロ/円・ポンド/円・豪ドル/円・ユーロ/米ドル）では
+    # 勝率56.7%・t値2.52。選定に使っていない標本ではコスト後がマイナスだった。
+    "previous_pairs": {"hit_rate": 0.567, "t_stat": 2.52, "held_out_net": -0.000021},
 }
 
 # テクニカルの裏付けと的中率の関係は、確認できなかった。
@@ -54,7 +58,7 @@ CONFIRM_MEASURED = {
 CONFIRMED = {"hit_rate": None, "retracted": True, "claimed": 0.591}
 UNCONFIRMED_HIT = None
 
-# 確信度の閾値ごとの実測（主要5ペア）。
+# 確信度の閾値ごとの実測（選び直した5ペア）。
 #
 # 検証時点の並びを1日ずつずらした、互いに重ならない3標本の平均。
 # 以前は1標本だけで測っており、56%区分を58.0%と表示していたが、
@@ -64,15 +68,15 @@ UNCONFIRMED_HIT = None
 # 62.8%という数字は運の要素が大きく、当てにできない（reliable=False）。
 # 1回あたりの損益とt値も3標本の平均。60%区分はt値1.39で有意ではない。
 CONFIDENCE_LEVELS = [
-    {"conf": 0.53, "hit": 0.539, "per_day": 2.11, "n": 843,
-     "mean": 0.00060, "t": 2.17,
-     "by_offset": [0.540, 0.523, 0.553], "spread": 0.030, "reliable": True},
-    {"conf": 0.56, "hit": 0.567, "per_day": 0.82, "n": 327,
-     "mean": 0.00088, "t": 2.52,
-     "by_offset": [0.537, 0.578, 0.585], "spread": 0.048, "reliable": True},
-    {"conf": 0.60, "hit": 0.558, "per_day": 0.20, "n": 80,
-     "mean": 0.00110, "t": 1.39,
-     "by_offset": [0.514, 0.628, 0.533], "spread": 0.114, "reliable": False},
+    {"conf": 0.53, "hit": 0.563, "per_day": 1.86, "n": 744,
+     "mean": 0.00072, "net": 0.00016, "t": 2.50,
+     "by_offset": [0.560, 0.580, 0.550], "spread": 0.030, "reliable": True},
+    {"conf": 0.56, "hit": 0.606, "per_day": 0.63, "n": 252,
+     "mean": 0.00143, "net": 0.00089, "t": 3.55,
+     "by_offset": [0.631, 0.606, 0.580], "spread": 0.051, "reliable": True},
+    {"conf": 0.60, "hit": 0.608, "per_day": 0.15, "n": 58,
+     "mean": 0.00164, "net": 0.00111, "t": 2.32,
+     "by_offset": [0.638, 0.621, 0.567], "spread": 0.071, "reliable": False},
 ]
 
 # 曜日と経済指標による絞り込みは、いったん採用したが取り下げた。
@@ -161,17 +165,51 @@ def confidence_stats_for(conf):
     return dict(best, label="{:.0f}%以上".format(best["conf"] * 100))
 
 
-# 主要通貨ペアの片道スプレッド目安（対価格比）。国内FX業者の標準的な水準。
-SPREAD = {
-    "USDJPY=X": 0.0000125, "EURJPY=X": 0.0000200, "GBPJPY=X": 0.0000550,
-    "AUDJPY=X": 0.0000450, "NZDJPY=X": 0.0000700, "CADJPY=X": 0.0000600,
-    "CHFJPY=X": 0.0000900, "EURUSD=X": 0.0000250, "GBPUSD=X": 0.0000600,
-    "AUDUSD=X": 0.0000500, "NZDUSD=X": 0.0000900, "USDCHF=X": 0.0000700,
-    "USDCAD=X": 0.0000700, "EURGBP=X": 0.0000700, "XAUUSD=X": 0.0003000,
+# 外為オンライン（店頭FX）の原則固定スプレッド。単位は「相手通貨の価格」で、
+# 円ペアは銭を円に直した値、それ以外は pips を価格に直した値。
+# 出典: 公式のスプレッド表（2026-08-25 取得）。
+#
+# **これまでの想定は狭すぎた。** 以前はドル円を価格比 0.00125% としていたが、
+# 実際は 0.9銭 = 0.0057% で、4.5倍の開きがある。コストを過小に見積もっていた。
+#
+# 2つ目の値は「拡大時」。原則固定とはいえ指標発表時や早朝は広がるので、
+# 都合のよい数字だけで判断しないよう両方持っておく。
+SPREAD_PRICE = {
+    # 円ペア（銭 → 円）
+    "USDJPY=X": (0.009, 0.05),   "EURJPY=X": (0.019, 0.06),
+    "GBPJPY=X": (0.010, 0.05),   "AUDJPY=X": (0.032, 0.083),
+    "NZDJPY=X": (0.036, 0.11),   "CADJPY=X": (0.031, 0.11),
+    "CHFJPY=X": (0.032, 0.20),   "ZARJPY=X": (0.149, 0.149),
+    # それ以外（pips → 価格）
+    "EURUSD=X": (0.00014, 0.00029), "GBPUSD=X": (0.00028, 0.00028),
+    "AUDUSD=X": (0.00026, 0.00026), "NZDUSD=X": (0.00038, 0.00038),
+    "USDCAD=X": (0.00035, 0.00086), "USDCHF=X": (0.00029, 0.00040),
+    "EURGBP=X": (0.00032, 0.00032), "EURAUD=X": (0.00028, 0.0013),
+    "EURNZD=X": (0.00061, 0.0021),  "EURCAD=X": (0.00042, 0.0011),
+    "EURCHF=X": (0.00025, 0.0007),  "GBPAUD=X": (0.00060, 0.0027),
+    "GBPNZD=X": (0.00100, 0.0035),  "GBPCHF=X": (0.00055, 0.0014),
+    "AUDNZD=X": (0.00053, 0.0011),  "AUDCHF=X": (0.00027, 0.0005),
 }
-DEFAULT_SPREAD = 0.00007
+_LAST_PRICE = {}      # signals() が最新の値段を入れる
+SPREAD_SOURCE = "外為オンライン 店頭FX 原則固定スプレッド（2026-08-25 取得）"
 
-# 各ペアを構成する通貨。経済指標がそのペアに関係するかの判定に使う。
+
+def spread_pct(key, price, wide=False):
+    """いまの値段に対するスプレッドの割合。
+
+    業者は価格の単位（銭・pips）で示すので、割合は値段によって変わる。
+    固定の割合を持っていると、相場が動くにつれてずれていく。
+    """
+    v = SPREAD_PRICE.get(key)
+    if not v or not price:
+        return DEFAULT_SPREAD
+    return v[1 if wide else 0] / float(price)
+
+
+DEFAULT_SPREAD = 0.0002       # 表にないペアの保守的な既定値
+
+SPREAD = {k: v[0] for k, v in SPREAD_PRICE.items()}   # 互換のため
+
 PAIR_CURRENCIES = {
     "USDJPY=X": ("USD", "JPY"), "EURJPY=X": ("EUR", "JPY"),
     "GBPJPY=X": ("GBP", "JPY"), "AUDJPY=X": ("AUD", "JPY"),
@@ -280,7 +318,10 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None,
         stop_dist = atr * config.FX_STOP_ATR_MULT
         target_dist = atr * config.FX_TARGET_ATR_MULT
         conf = max(fc["prob_up"], 1 - fc["prob_up"])
-        spread = SPREAD.get(a["key"], DEFAULT_SPREAD)
+        # スプレッドは業者が価格の単位で示すので、いまの値段から割合を出す。
+        _LAST_PRICE[a["key"]] = px
+        spread = spread_pct(a["key"], px)
+        spread_wide = spread_pct(a["key"], px, wide=True)
         out.append({
             "key": a["key"], "name": a["name"],
             "price": px,
@@ -299,6 +340,10 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None,
             "atr": atr,
             "atr_pct": atr / px,
             "spread_pct": spread,
+            "spread_pct_wide": spread_wide,
+            "cost_round_trip": spread * 2,
+            "cost_vs_edge": (spread * 2 / MEASURED["edge_per_trade"])
+                            if MEASURED["edge_per_trade"] else None,
             "rsi": ind["rsi14"][-1],
             "adx": ind["adx14"][-1],
             "macd": ind["macd"][-1],
@@ -311,6 +356,10 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None,
             "n_eff": fc["n_eff"],
             "samples": fc["n"],
             "confirm": confirmation(direction, comp),
+            # フィボナッチの水準。プロが実際に見ている道具なので表示する。
+            # 的中率との関係は tests/run_fib.py で測っており、その結果に
+            # 応じて説明を変える（勝手に「効く」とは書かない）。
+            "fib": fibonacci.context(a["bars"], config.FIB_LOOKBACK),
         })
     # 5ペアは毎日すべて表示する。確信度は「見送りかどうか」の印として使う。
     # 検証で優位性が確認できたのは確信度56%以上のときだけなので、
@@ -359,13 +408,18 @@ def position_size(capital, risk_per_trade, stop_pct, price):
 
 
 def plan(capital=None, target=None, risk_per_trade=None, trades_per_day=None,
-         avg_stop_pct=0.005, avg_spread_pct=0.00004):
+         avg_stop_pct=0.005, avg_spread_pct=None):
     """資金計画。実測した優位性をもとに、狙える額と必要資金を出す。"""
     capital = capital if capital is not None else config.FX_CAPITAL_JPY
     target = target if target is not None else config.FX_DAILY_TARGET_JPY
     risk = risk_per_trade if risk_per_trade is not None else config.FX_RISK_PER_TRADE
     trades = trades_per_day if trades_per_day is not None else config.FX_TRADES_PER_DAY
 
+    if avg_spread_pct is None:
+        # シグナルを出すペアの平均。実額を直近の値段で割って求める。
+        vals = [spread_pct(k, _LAST_PRICE.get(k)) for k in config.FX_SIGNAL_PAIRS
+                if _LAST_PRICE.get(k)]
+        avg_spread_pct = (sum(vals) / len(vals)) if vals else DEFAULT_SPREAD
     edge = MEASURED["edge_per_trade"]
     net_edge = edge - avg_spread_pct * 2      # 往復スプレッドを差し引く
 
