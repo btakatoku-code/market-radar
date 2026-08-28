@@ -1616,6 +1616,13 @@ function monitorCard(d) {
       <div class="metric"><span class="k">下回る確率</span>
         <span class="v">${m.p_value != null ? m.p_value.toFixed(3) : '—'}</span></div>
     </div>
+    ${d.fx_monitor_pnl ? `<div class="row" style="margin-top:12px">
+      <span class="muted">1回あたりの損益</span>
+      <span class="num ${d.fx_monitor_pnl.mean >= 0 ? 'up' : 'down'}">${
+        pct(d.fx_monitor_pnl.mean, 3)}
+        <span class="muted">想定 ${pct(d.fx_monitor_pnl.expected, 3)}</span></span></div>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">${esc(d.fx_monitor_pnl.detail)}
+      当たっていても負けの幅が大きければ損は出るので、的中率とは別に見ています。</p>` : ''}
     <details class="detail" style="margin-top:10px"><summary>先に決めてある基準</summary>
       <div class="scroll-x"><table class="tbl">
         <tr><td>対象</td><td>${esc(r.target)}</td></tr>

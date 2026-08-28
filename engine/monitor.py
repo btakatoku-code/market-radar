@@ -94,9 +94,53 @@ def check(wins, n, expected, min_n=MIN_SAMPLES):
     return res
 
 
+def check_pnl(mean_gain, sd_gain, n, expected, min_n=MIN_SAMPLES):
+    """1回あたりの損益が想定から離れていないかを判定する。
+
+    的中率が良くても損益が悪いことがある（負けの幅が大きい場合）。
+    実際、実績8件は的中率37.5%で1回平均 -0.145% と、両方悪い。
+    的中率だけを見ていると、この形を取り逃す。
+    """
+    res = {"n": n, "mean": mean_gain, "expected": expected,
+           "min_samples": min_n, "t": None, "verdict": "not_enough",
+           "label": "まだ判定できません",
+           "detail": "判定には{}件必要です（いま{}件）。".format(min_n, n)}
+    if n < min_n or not sd_gain:
+        res["remaining"] = max(0, min_n - n)
+        return res
+    t = mean_gain / (sd_gain / math.sqrt(n))
+    res["t"] = t
+    if mean_gain <= 0 and t < -1.0:
+        res["verdict"] = "losing"
+        res["label"] = "損益がマイナスです"
+        res["detail"] = ("1回あたり{:+.3f}%（想定{:+.3f}%）。的中率が想定通りでも、"
+                         "負けの幅が大きければ損は出ます。").format(
+                             mean_gain * 100, expected * 100)
+    elif mean_gain <= 0:
+        res["verdict"] = "below"
+        res["label"] = "損益が想定を下回っています"
+        res["detail"] = "1回あたり{:+.3f}%（想定{:+.3f}%）。".format(
+            mean_gain * 100, expected * 100)
+    elif mean_gain >= expected:
+        res["verdict"] = "ok"
+        res["label"] = "想定通りです"
+        res["detail"] = "1回あたり{:+.3f}%（想定{:+.3f}%）。".format(
+            mean_gain * 100, expected * 100)
+    else:
+        res["verdict"] = "watch"
+        res["label"] = "想定の範囲内です"
+        res["detail"] = ("1回あたり{:+.3f}%（想定{:+.3f}%）。下回っていますが、"
+                         "この件数では偶然の範囲です。").format(
+                             mean_gain * 100, expected * 100)
+    return res
+
+
 RULES = {
     "target": "FXのシグナル（確信度56%以上・選び直した5ペア）",
     "expected": 0.606,
+    "expected_net": 0.00089,   # コストを引いた1回あたりの損益
+    "watch_pnl": ("的中率だけでなく1回あたりの損益も監視する。"
+                  "当たっていても負けの幅が大きければ損は出るため。"),
     "min_samples": MIN_SAMPLES,
     "alarm_p": ALARM_P,
     "stop_upper": STOP_UPPER,

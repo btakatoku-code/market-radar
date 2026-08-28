@@ -19,6 +19,28 @@ def _ensure():
     os.makedirs(HISTORY_DIR, exist_ok=True)
 
 
+def _dedupe(rows):
+    """同じ日・同じ銘柄・同じ枠は1件にまとめる。最初に記録した予測を残す。
+
+    追記の時点では重複を防いでいるが、GitHub Actions と手元の実行が
+    ぶつかって履歴を統合したときに、実行時刻の違う同じ予測が並んで
+    残ったことがある（426行のうち126行が余分だった）。
+    統合の仕方に関係なく集計が狂わないよう、読み込み時にも潰しておく。
+
+    最初のものを残すのは、予測してから待つ、という実際の順序に合うため。
+    """
+    seen = {}
+    for r in sorted(rows, key=lambda x: (x.get("ts") or 0)):
+        k = (r.get("date"), r.get("key"), r.get("bucket"))
+        if k in seen:
+            # 採点済みの結果だけは引き継ぐ（後の行にしか入っていない場合がある）
+            if seen[k].get("actual") is None and r.get("actual") is not None:
+                seen[k]["actual"] = r["actual"]
+            continue
+        seen[k] = r
+    return list(seen.values())
+
+
 def load_predictions():
     _ensure()
     if not os.path.exists(PRED_FILE):
@@ -33,7 +55,7 @@ def load_predictions():
                 out.append(json.loads(line))
             except Exception:
                 continue
-    return out
+    return _dedupe(out)
 
 
 def append_predictions(records):
@@ -107,9 +129,12 @@ def _stats(rows):
     mean_abs_err = sum(abs(r["error"]) for r in done) / n
     # 予測方向にポジションを取った場合の平均損益
     gains = [r["actual"] * (1 if r["pred"] > 0 else -1) for r in done]
+    mg = sum(gains) / n
+    # 損益のばらつき。的中率だけでなく損益も監視するのに使う。
+    sd = (sum((g - mg) ** 2 for g in gains) / (n - 1)) ** 0.5 if n > 1 else 0.0
     return dict(n=n, hit_rate=hits / n, mean_pred=mean_pred,
                 mean_actual=mean_actual, mean_abs_error=mean_abs_err,
-                mean_gain=sum(gains) / n,
+                mean_gain=mg, sd_gain=sd,
                 pending=sum(1 for r in rows if r.get("actual") is None))
 
 

@@ -593,6 +593,11 @@ def build(use_cache=False, verbose=True):
                   * ((acc_live.get("fx") or {}).get("n") or 0)),
             (acc_live.get("fx") or {}).get("n") or 0,
             fxmod.MEASURED["hit_rate"]),
+        "fx_monitor_pnl": monitor.check_pnl(
+            (acc_live.get("fx") or {}).get("mean_gain") or 0.0,
+            (acc_live.get("fx") or {}).get("sd_gain") or 0.0,
+            (acc_live.get("fx") or {}).get("n") or 0,
+            fxmod.MEASURED["net_per_trade"]),
         "monitor_rules": monitor.RULES,
         "fx_corr": fx_corr_out,
         "fx_swap": {
