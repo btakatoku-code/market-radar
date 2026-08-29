@@ -630,6 +630,23 @@ function progressCard(d) {
 }
 
 /* ---------- 今日 ---------- */
+
+/* ---------- 停止の表示 ----------
+   的中率タブの奥にある文字列だけでは見落とす。決めた基準に達したら
+   目に入る場所に出し、シグナルも建てられない状態にする。 */
+function haltBanner(d) {
+  if (!d.fx_halted) return '';
+  const m = d.fx_monitor || {};
+  const r = d.monitor_rules || {};
+  return `<div class="banner warn"><strong>FXのシグナルを停止しています</strong>
+    ${esc(m.detail || '')}
+    先に決めてあった停止の基準（的中率の95%区間の上端が${
+      ((r.stop_upper || 0.5) * 100).toFixed(0)}%を下回る）に達したためです。
+    <b>この画面から解除はできません。</b>ボタン一つで戻せる非常停止は意味がないためです。
+    再開するには原因を調べたうえで設定を直す必要があります。
+    分析と表示は続いているので、記録は貯まり続けます。</div>`;
+}
+
 function viewHome(d) {
   const r = d.regime || {}, u = d.usdjpy || {};
   const regimeCard = `<div class="card"><h2>いまの市場環境</h2>
@@ -676,7 +693,7 @@ function viewHome(d) {
 
   const stH = settings();
   const fxAll = ((d.fx && d.fx.signals) || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= stH.fxConf,
+    tradeable: x.confidence >= stH.fxConf && !d.fx_halted,
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
     || b.confidence - a.confidence);
@@ -706,6 +723,7 @@ function viewHome(d) {
 
   return `
   ${statusCard(d)}
+  ${haltBanner(d)}
   ${(d.missing_required || []).length ? `<div class="banner warn">
     <strong>表示できていない銘柄があります</strong>
     ${d.missing_required.map(m => esc(m.name)).join('、')}のデータを取得できませんでした。
@@ -1438,8 +1456,9 @@ function viewFx(d) {
   const barCol = ratio < 30 ? 'var(--down)' : ratio < 80 ? 'var(--warn)' : 'var(--up)';
   const m = base.measured || {};
   const all = (d.fx.signals || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= st.fxConf,
-    status: x.confidence >= st.fxConf ? 'シグナルあり' : '見送り',
+    tradeable: x.confidence >= st.fxConf && !d.fx_halted,
+    status: d.fx_halted ? '停止中'
+      : (x.confidence >= st.fxConf ? 'シグナルあり' : '見送り'),
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
     || b.confidence - a.confidence);
@@ -1532,7 +1551,7 @@ function viewFx(d) {
     </article>`;
   }).join('');
 
-  return `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
+  return haltBanner(d) + `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
     分析は${d.fx_pool_pairs || 14}ペアで行い、主要${d.fx_signal_pairs || 5}ペアを毎日表示します。
     いま選んでいる確信度${(st.fxConf * 100).toFixed(0)}%以上での実測は
     <b>勝率${lv ? (lv.hit * 100).toFixed(1) + '%' : '—'}</b>

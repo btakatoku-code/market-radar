@@ -431,6 +431,26 @@ def build(use_cache=False, verbose=True):
     for k, legs in fxrisk.PAIR_LEGS.items():
         fx_corr_out["legs"][k] = list(legs)
 
+    fx_monitor = monitor.check(
+        round(((acc_live.get("fx") or {}).get("hit_rate") or 0)
+              * ((acc_live.get("fx") or {}).get("n") or 0)),
+        (acc_live.get("fx") or {}).get("n") or 0,
+        fxmod.MEASURED["hit_rate"])
+
+    # 監視が「停止」と判定したら、シグナルを実際に止める。
+    #
+    # 表示だけでは意味がない。的中率タブの奥にある文字列を見落としたまま、
+    # 習慣で建ててしまう。決めた基準に達したら、建てられない状態にする。
+    #
+    # 解除は画面からできないようにしてある。ボタン一つで戻せる非常停止は、
+    # 押した意味がなくなる。再開するには原因を調べたうえで設定を直す必要がある。
+    halted = fx_monitor["verdict"] == "stop"
+    if halted:
+        for sg in fx_signals:
+            sg["tradeable"] = False
+            sg["status"] = "停止中"
+            sg["halt_reason"] = fx_monitor["detail"]
+
     # ポジション全体の診断。円換算の金額は資金設定に依存するので、
     # 割合だけを返してアプリ側で掛け算する。
     fx_portfolio = fxrisk.diagnose(
@@ -588,11 +608,8 @@ def build(use_cache=False, verbose=True):
         "fx_signal_pairs": len(config.FX_SIGNAL_PAIRS),
         "fx_pool_pairs": len(fx_assets),
         "fx_confirmed": fxmod.CONFIRMED,
-        "fx_monitor": monitor.check(
-            round(((acc_live.get("fx") or {}).get("hit_rate") or 0)
-                  * ((acc_live.get("fx") or {}).get("n") or 0)),
-            (acc_live.get("fx") or {}).get("n") or 0,
-            fxmod.MEASURED["hit_rate"]),
+        "fx_monitor": fx_monitor,
+        "fx_halted": halted,
         "fx_monitor_pnl": monitor.check_pnl(
             (acc_live.get("fx") or {}).get("mean_gain") or 0.0,
             (acc_live.get("fx") or {}).get("sd_gain") or 0.0,
