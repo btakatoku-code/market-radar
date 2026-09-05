@@ -634,6 +634,24 @@ function progressCard(d) {
 /* ---------- 停止の表示 ----------
    的中率タブの奥にある文字列だけでは見落とす。決めた基準に達したら
    目に入る場所に出し、シグナルも建てられない状態にする。 */
+
+/* ---------- データが古いときの警告 ----------
+   通信できない、更新が止まっている、といった理由で古いまま表示される
+   ことがある。黙って古い数字を見せるのがいちばん危ない。 */
+function staleBanner(d) {
+  if (!d.generated_at) return '';
+  const t = new Date(d.generated_at).getTime();
+  if (isNaN(t)) return '';
+  const h = (Date.now() - t) / 3600000;
+  if (h < 4) return '';
+  const txt = h < 48 ? `${h.toFixed(1)}時間前` : `${Math.floor(h / 24)}日前`;
+  return `<div class="banner warn"><strong>表示しているデータが古いです</strong>
+    このデータは${txt}のものです（更新は2時間ごと）。
+    通信できていないか、更新が止まっている可能性があります。
+    右上の更新ボタンを押すか、アプリを開き直してください。
+    <b>古い予測にもとづいて売買しないでください。</b></div>`;
+}
+
 function haltBanner(d) {
   if (!d.fx_halted) return '';
   const m = d.fx_monitor || {};
@@ -723,6 +741,7 @@ function viewHome(d) {
 
   return `
   ${statusCard(d)}
+  ${staleBanner(d)}
   ${haltBanner(d)}
   ${(d.missing_required || []).length ? `<div class="banner warn">
     <strong>表示できていない銘柄があります</strong>
@@ -1551,7 +1570,7 @@ function viewFx(d) {
     </article>`;
   }).join('');
 
-  return haltBanner(d) + `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
+  return staleBanner(d) + haltBanner(d) + `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
     分析は${d.fx_pool_pairs || 14}ペアで行い、主要${d.fx_signal_pairs || 5}ペアを毎日表示します。
     いま選んでいる確信度${(st.fxConf * 100).toFixed(0)}%以上での実測は
     <b>勝率${lv ? (lv.hit * 100).toFixed(1) + '%' : '—'}</b>
@@ -2103,9 +2122,34 @@ async function checkVersion() {
   } catch (e) { /* 通信できないときは何もしない */ }
 }
 
+/* ---------- データの取り直し ----------
+   iPhoneのホーム画面から使うと、閉じてもページはメモリに残る。
+   起動時に一度読むだけでは、翌週も1週間前のデータを見続けることになる
+   （実際にそうなった）。版の確認だけでは足りず、データ自体を取り直す。 */
+const STALE_HOURS = 3;      // 更新は2時間ごとなので、3時間を超えたら取り直す
+
+function dataAgeHours() {
+  if (!DATA || !DATA.generated_at) return null;
+  const t = new Date(DATA.generated_at).getTime();
+  return isNaN(t) ? null : (Date.now() - t) / 3600000;
+}
+
+function refreshIfStale(reason) {
+  const age = dataAgeHours();
+  if (age == null || age >= STALE_HOURS) load(true);
+  return age;
+}
+
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) checkVersion();
+  if (document.hidden) return;
+  checkVersion();          // アプリ自体の更新
+  refreshIfStale();        // データの更新
 });
+
+// 開いたままでも取り直す。画面を見ている間に更新時刻をまたぐことがある。
+setInterval(() => {
+  if (!document.hidden) refreshIfStale();
+}, 10 * 60 * 1000);
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
