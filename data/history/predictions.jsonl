@@ -734,3 +734,4 @@
 {"date": "2026-09-05", "ts": 1788561568, "key": "GILD", "name": "ギリアド・サイエンシズ", "bucket": "category", "horizon": 21, "price": 150.995, "pred": 0.00812128155212319, "prob": 0.5294455891513729, "rank": 3, "due": 1791153568, "actual": null}
 {"date": "2026-09-05", "ts": 1788561568, "key": "4180.T", "name": "Appier Group", "bucket": "category", "horizon": 21, "price": 1512.0, "pred": 0.030215465616847754, "prob": 0.5294455891513729, "rank": 1, "due": 1791153568, "actual": null}
 {"date": "2026-09-05", "ts": 1788561568, "key": "EEM", "name": "iシェアーズMSCIエマージング", "bucket": "category", "horizon": 21, "price": 68.7, "pred": 0.006962215508485291, "prob": 0.5583708708708709, "rank": 3, "due": 1791153568, "actual": null}
+{"date": "2026-09-05", "ts": 1788568150, "key": "SUSA", "name": "iシェアーズESGオプティマイズドMSCI米国ETF", "bucket": "category", "horizon": 21, "price": 158.77, "pred": 0.0038815081506880554, "prob": 0.5458725168794976, "rank": 3, "due": 1791160150, "actual": null}
