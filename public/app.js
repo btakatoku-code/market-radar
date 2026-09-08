@@ -1577,7 +1577,7 @@ function viewFx(d) {
     </article>`;
   }).join('');
 
-  return staleBanner(d) + haltBanner(d) + `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
+  return staleBanner(d) + haltBanner(d) + entryWindowCard(d) + `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
     分析は${d.fx_pool_pairs || 14}ペアで行い、主要${d.fx_signal_pairs || 5}ペアを毎日表示します。
     いま選んでいる確信度${(st.fxConf * 100).toFixed(0)}%以上での実測は
     <b>勝率${lv ? (lv.hit * 100).toFixed(1) + '%' : '—'}</b>
@@ -1634,6 +1634,52 @@ function viewFx(d) {
    検証で確認できた優位性は、いつまでも続く保証がない。問題は
    「消えたことにいつ気づくか」で、後から基準を決めると都合よく
    解釈できてしまう。だから基準は実績を見る前に固定してある。 */
+
+/* ---------- 自己点検の表示 ----------
+   静かに壊れる不具合が繰り返し起きたが、どれも利用者か偶然が見つけたもので、
+   アプリ自身は一度も気づけなかった。機械が毎回確かめて、破れたら出す。 */
+function selfCheckCard(d) {
+  const sc = d.selfcheck;
+  if (!sc) return '';
+  const ng = sc.checks.filter(c => !c.ok);
+  return `<div class="card"><h2>自己点検</h2>
+    <div class="row"><span class="big ${sc.ok ? 'up' : 'down'}">${
+      sc.ok ? '異常は見つかりませんでした' : `${sc.failed}件の異常`}</span>
+      <span class="muted">${esc((sc.checked_at || '').slice(5, 16).replace('T', ' '))}</span></div>
+    <p class="muted" style="margin:6px 0 10px">
+      更新のたびに機械が確かめています。これまで不具合はすべて人が偶然見つけたもので、
+      アプリ自身は気づけませんでした。その反省で入れた仕組みです。</p>
+    <ul class="checks" style="grid-template-columns:1fr">
+      ${sc.checks.map(c => `<li class="${c.ok ? 'yes' : 'no'}">${c.ok ? '✓' : '✕'} ${esc(c.name)}
+        <br><span class="muted" style="font-size:11.5px">${esc(c.detail)}</span>
+        ${c.ok ? '' : `<br><span class="muted" style="font-size:11.5px">${esc(c.why)}</span>`}</li>`).join('')}
+    </ul>
+    ${ng.length ? `<p class="muted" style="margin-top:9px">
+      異常があるときは、その数字を売買の判断に使わないでください。</p>` : ''}</div>`;
+}
+
+/* ---------- 判断に適した時刻 ----------
+   検証は「確定した終値で入り、次の終値で出る」前提。為替の日足は
+   日本時間の朝8時ごろに確定するので、判断はその直後に1日1回でよい。
+   2時間ごとに眺める必要はない。 */
+function entryWindowCard(d) {
+  const now = new Date();
+  const jst = new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+  const h = jst.getHours();
+  const inWindow = h >= 8 && h < 11;
+  const next = new Date(jst);
+  next.setHours(8, 0, 0, 0);
+  if (h >= 11 || h < 8) { if (h >= 11) next.setDate(next.getDate() + 1); }
+  const hrs = Math.max(0, (next - jst) / 3600000);
+  return `<div class="banner ${inWindow ? 'info' : ''}">
+    <strong>${inWindow ? 'いまが判断に適した時間帯です' : '判断は1日1回で足ります'}</strong>
+    検証は<b>確定した終値で入る前提</b>です。為替の日足は日本時間の朝8時ごろに
+    確定するので、見るのは<b>8時〜11時ごろの1回だけ</b>で足ります。
+    ${inWindow ? '' : `次は${next.getMonth() + 1}月${next.getDate()}日 8:00ごろ（あと${hrs.toFixed(1)}時間）。`}
+    それ以外の時間に建てると、基準の終値から値段が離れて別の取引になります。
+    長時間見張る必要はありません。</div>`;
+}
+
 function monitorCard(d) {
   const m = d.fx_monitor, r = d.monitor_rules;
   if (!m || !r) return '';
@@ -1922,7 +1968,7 @@ function viewAcc(d) {
 
   const cav = v.caveats.map(c => `<li style="margin-bottom:5px">${esc(c)}</li>`).join('');
 
-  return monitorCard(d) + live + prog + cmp + costCard + `
+  return selfCheckCard(d) + monitorCard(d) + live + prog + cmp + costCard + `
   <div class="banner"><strong>事前検証の結論</strong>
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。

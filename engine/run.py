@@ -23,6 +23,7 @@ import events
 import fx as fxmod
 import fxrisk
 import monitor
+import selfcheck
 import swap as swapmod
 import rates as ratesmod
 import market
@@ -616,6 +617,8 @@ def build(use_cache=False, verbose=True):
             (acc_live.get("fx") or {}).get("sd_gain") or 0.0,
             (acc_live.get("fx") or {}).get("n") or 0,
             fxmod.MEASURED["net_per_trade"]),
+        "selfcheck": selfcheck.run_all(
+            assets, preds, shown, fx_signals, acc_live),
         "monitor_rules": monitor.RULES,
         "fx_corr": fx_corr_out,
         "fx_swap": {
