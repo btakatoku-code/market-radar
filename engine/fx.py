@@ -325,6 +325,11 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None,
         out.append({
             "key": a["key"], "name": a["name"],
             "price": px,
+            # px は確定した足の終値（検証が入る前提の値段）。
+            # live は現在の実勢。離れているほど、検証の前提から外れる。
+            "live_price": bars.get("live_close"),
+            "gap_pct": ((bars["live_close"] / px - 1)
+                        if bars.get("live_close") and px else None),
             "direction": "買い" if direction > 0 else "売り",
             "dir_sign": direction,
             "expected_move": fc["expected_return"],
@@ -383,8 +388,18 @@ def signals(fx_assets, pool, horizon=None, top_n=None, pairs=None,
               if rate_series else None)
         x["rate"] = rate_backing(x["confidence"], tw,
                                  1 if x["direction"] == "買い" else -1)
-        x["tradeable"] = x["confidence"] >= config.FX_MIN_CONFIDENCE
-        x["status"] = "シグナルあり" if x["tradeable"] else "見送り"
+        # 検証は「確定した終値で入り、次の終値で出る」前提。いまの実勢が
+        # その終値から離れているほど、前提から外れる。実測の優位性は
+        # 1回あたり+0.143%しかないので、それを超える乖離があるなら
+        # もう別の取引になっている。
+        gap = x.get("gap_pct")
+        limit = max(abs(x["expected_move"]), 0.002)
+        x["entry_stale"] = bool(gap is not None and abs(gap) > limit)
+        x["entry_limit"] = limit
+        x["tradeable"] = (x["confidence"] >= config.FX_MIN_CONFIDENCE
+                          and not x["entry_stale"])
+        x["status"] = ("シグナルあり" if x["tradeable"]
+                       else ("基準から離れすぎ" if x["entry_stale"] else "見送り"))
         x["expected_hit"] = x["conf_stats"]["hit"]
     out.sort(key=lambda x: (-x["expected_hit"], -x["confirm"]["level"],
                             -x["confidence"], -x["abs_move"]))

@@ -1536,9 +1536,16 @@ function viewFx(d) {
       ? `<span class="pill ${s.conf_stats.hit >= 0.58 ? 'ok' : 'wa'}">この区分の実測 ${(s.conf_stats.hit * 100).toFixed(1)}%</span>`
       : '<span class="pill">実測区分に届かず</span>'}
         ${hitBadge(s.hit_rate, s.hit_n, s.hit_gain, BASE_FX)}
+        ${s.gap_pct != null ? `<span class="pill ${s.entry_stale ? 'no' : ''}">基準の終値から ${
+          pct(s.gap_pct)}</span>` : ''}
         ${s.rate && s.rate.state !== 'unknown'
       ? `<span class="pill">${esc(s.rate.label)}</span>` : ''}
       </div>
+      ${s.entry_stale ? `<p class="muted" style="margin:8px 0 0">
+        検証は<b>確定した終値で入る前提</b>です。基準の終値${num(s.price, 4)}に対して
+        いまの実勢は${num(s.live_price, 4)}で、${pct(s.gap_pct)}離れています。
+        実測の優位性は1回あたり+0.143%しかないので、この乖離では別の取引になります。
+        次の終値（日本時間の朝8時ごろ）を待ってください。</p>` : ''}
       ${s.rate && s.rate.note
       ? `<p class="muted" style="margin:8px 0 0">${esc(s.rate.note)}</p>` : ''}
       ${chartSVG(s.chart, 140)}
@@ -1661,6 +1668,15 @@ function monitorCard(d) {
         <span class="muted">想定 ${pct(d.fx_monitor_pnl.expected, 3)}</span></span></div>
       <p class="muted" style="margin:4px 0 0;font-size:12px">${esc(d.fx_monitor_pnl.detail)}
       当たっていても負けの幅が大きければ損は出るので、的中率とは別に見ています。</p>` : ''}
+    ${(d.accuracy && d.accuracy.before_fix && d.accuracy.before_fix.fx)
+      ? `<div class="banner warn" style="margin-top:12px">
+        <strong>採点をやり直しています</strong>
+        ${esc(d.accuracy.before_fix.note)}
+        修正前の記録は${d.accuracy.total_before_fix}件（FXは${d.accuracy.before_fix.fx.n}件・
+        的中${(d.accuracy.before_fix.fx.hit_rate * 100).toFixed(1)}%・
+        1回平均${pct(d.accuracy.before_fix.fx.mean_gain)}）でした。
+        これは戦略の成績ではなく、壊れた入力で動いていたときの記録です。
+        隠さず残しますが、判定には使いません。</div>` : ''}
     <details class="detail" style="margin-top:10px"><summary>先に決めてある基準</summary>
       <div class="scroll-x"><table class="tbl">
         <tr><td>対象</td><td>${esc(r.target)}</td></tr>

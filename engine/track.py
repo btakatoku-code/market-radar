@@ -8,6 +8,8 @@
 記録は追記のみ。過去の予測を書き換えることはしない。
 """
 import json
+
+import config
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -138,14 +140,39 @@ def _stats(rows):
                 pending=sum(1 for r in rows if r.get("actual") is None))
 
 
+def _after_fix(rows):
+    """不具合の修正より後の予測だけを返す。
+
+    修正前は未確定の足を使っており、モデルが誤った入力で予測していた。
+    その結果を混ぜたままだと、直した後の成績が永久に汚れる。
+    古い分は捨てずに別枠で見せる（隠すためではなく、分けるため）。
+    """
+    import datetime
+    try:
+        cut = datetime.datetime.fromisoformat(config.PIPELINE_FIXED_AT).timestamp()
+    except Exception:
+        return rows
+    return [r for r in rows if (r.get("ts") or 0) >= cut]
+
+
 def summary(predictions):
     """枠ごと・直近の的中率をまとめる。"""
-    out = {"overall": _stats(predictions)}
+    # 不具合の修正より後の予測だけで採点する。混ぜると直した後の成績が汚れる。
+    valid = _after_fix(predictions)
+    out = {"overall": _stats(valid)}
     for bucket in ("top5", "pinned", "category", "fx", "fx_watch"):
-        rows = [r for r in predictions if r["bucket"] == bucket]
+        rows = [r for r in valid if r["bucket"] == bucket]
         out[bucket] = _stats(rows)
+    # 修正前の分は捨てずに別枠で持つ（隠すためではなく、分けるため）
+    before = [r for r in predictions if r not in valid]
+    out["before_fix"] = {
+        "fx": _stats([r for r in before if r["bucket"] == "fx"]),
+        "overall": _stats(before),
+        "note": config.PIPELINE_FIX_NOTE,
+        "fixed_at": config.PIPELINE_FIXED_AT,
+    }
     # 直近30件・90件
-    done = [r for r in predictions if r.get("actual") is not None]
+    done = [r for r in valid if r.get("actual") is not None]
     done.sort(key=lambda r: r.get("actual_at") or r["due"])
     out["recent30"] = _stats(done[-30:]) if len(done) >= 5 else None
     out["recent90"] = _stats(done[-90:]) if len(done) >= 5 else None
@@ -160,7 +187,8 @@ def summary(predictions):
             per_asset.append(dict(key=key, name=rows[-1].get("name", key), **st))
     per_asset.sort(key=lambda x: -x["hit_rate"])
     out["per_asset"] = per_asset[:40]
-    out["total_logged"] = len(predictions)
+    out["total_logged"] = len(valid)
+    out["total_before_fix"] = len(before)
     return out
 
 

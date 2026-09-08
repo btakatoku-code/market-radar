@@ -37,6 +37,52 @@ def _get(url, timeout=20, retries=3):
     raise last
 
 
+def drop_incomplete(bars, now=None):
+    """まだ終わっていない足を落とす。
+
+    Yahoo も Binance も、日足に「進行中の当日」を1本混ぜて返す。その足の
+    終値はいまの値段でしかなく、高値・安値・出来高も途中までの値。
+
+    これを確定した足として扱っていたため、モデルが「大きく動いた足が
+    直前に完成した」と誤認し、その反動を予測していた。実測では
+    「当日途中の動き」と「予測」の相関が -0.470、「予測」と「実際」の
+    相関が -0.220 で、コイン投げより悪い結果になっていた。
+    検証は必ず確定した足だけを使うので、実運用とここがずれていた。
+
+    見分け方は2つ。どちらかに当たれば落とす。
+      1. 確定した足は毎回同じ時刻に刻まれる。最後だけ時刻が違えば進行中
+         （Yahoo の為替・株はこの形で、現在時刻が入る）
+      2. 足の間隔の半分も経っていなければ進行中
+         （Binance や暗号資産はこの形で、時刻は規則的なまま）
+
+    確定した足を数時間落としてしまうことはあるが、未確定の足を使うより
+    はるかに安全。今回の不具合はまさにそれで損をした。
+    """
+    t = bars.get("t") or []
+    if len(t) < 4:
+        return bars
+    now = now if now is not None else time.time()
+
+    def tod(x):
+        return x % 86400
+
+    irregular = tod(t[-2]) == tod(t[-3]) and tod(t[-1]) != tod(t[-2])
+    diffs = [t[k + 1] - t[k] for k in range(len(t) - 6, len(t) - 1) if t[k + 1] > t[k]]
+    period = min(diffs) if diffs else 0
+    too_fresh = bool(period) and (now - t[-1]) < period * 0.5
+
+    if irregular or too_fresh:
+        # 落とす足の終値＝いまの実勢価格。分析には使わないが、
+        # 「基準の終値といまの値段がどれだけ離れているか」を見せるのに要る。
+        # 検証は終値で入る前提なので、離れているほどその前提が崩れる。
+        bars["live_close"] = bars["c"][-1] if bars.get("c") else None
+        bars["live_t"] = t[-1]
+        for k in ("t", "o", "h", "l", "c", "v"):
+            if isinstance(bars.get(k), list) and len(bars[k]) == len(t):
+                bars[k] = bars[k][:-1]
+    return bars
+
+
 def _cache_path(key):
     os.makedirs(CACHE_DIR, exist_ok=True)
     safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in key)
@@ -110,7 +156,7 @@ def fetch_yahoo(symbol, rng="10y", interval="1d", use_cache=True):
             bars["dividends"] = sorted(divs)
             bars["currency"] = res["meta"].get("currency")
             bars["source"] = "yahoo"
-            return bars
+            return drop_incomplete(bars)
         except Exception:
             return None
     return _cached(f"yh_{symbol}_{rng}_{interval}_v3", _do, use_cache)
@@ -157,7 +203,7 @@ def fetch_binance(symbol, interval="1d", limit=3000, use_cache=True):
             return None
         bars["currency"] = "USD"
         bars["source"] = "binance"
-        return bars
+        return drop_incomplete(bars)
     return _cached(f"bn_{symbol}_{interval}_{limit}", _do, use_cache)
 
 
