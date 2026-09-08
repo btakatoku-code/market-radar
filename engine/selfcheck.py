@@ -113,6 +113,52 @@ def check_scoring_sanity(summary):
     }
 
 
+def check_parity(fx_assets, offsets=(20, 60, 120)):
+    """実運用と検証が、同じ入力に同じ答えを返すか。
+
+    既知の症状を見張る検査は、次の未知の不具合を捕まえられない。これは
+    直接の照合で、過去のある日までのデータだけを実運用の経路に渡し、
+    検証の経路と同じ予測になるかを見る。
+
+    未確定の足の不具合は、この検査なら初日に見つかった（実際、その状態を
+    再現すると5ペアすべてで不一致、向きの食い違いも検出できる）。
+    """
+    import parity
+    if not fx_assets:
+        return {"name": "実運用と検証が一致するか", "ok": True,
+                "detail": "為替データがありません。", "why": ""}
+    base = next((a for a in fx_assets if a["key"] == "USDJPY=X"), fx_assets[0])
+    t = base["bars"]["t"]
+    results = []
+    for off in offsets:
+        if len(t) <= off + config.MIN_BARS:
+            continue
+        ts = t[-off]
+        rows = parity.compare(fx_assets, config.FX_SIGNAL_PAIRS,
+                              ts, config.HORIZON_FX)
+        r = parity.summarize(rows)
+        r["offset"] = off
+        results.append(r)
+    if not results:
+        return {"name": "実運用と検証が一致するか", "ok": True,
+                "detail": "照合できる時点がありません。", "why": ""}
+    ng = [r for r in results if not r["ok"]]
+    worst = max((r["max_diff_return"] for r in results), default=0.0)
+    return {
+        "name": "実運用と検証が一致するか",
+        "ok": not ng,
+        "detail": ("{}時点すべてで一致（最大差 {:.1e}）。".format(len(results), worst)
+                   if not ng else
+                   "{}時点中{}時点で食い違い（最大差 {:.1e}、向きの不一致 {}件）。".format(
+                       len(results), len(ng), worst,
+                       sum(r["direction_mismatch"] for r in ng))),
+        "why": ("食い違うなら、検証で測った成績は実運用に当てはまりません。"
+                "既知の症状を見張る検査では次の不具合を捕まえられないため、"
+                "直接照合しています。"),
+        "results": results,
+    }
+
+
 def run_all(assets, predictions, shown_keys, signals, summary):
     checks = [
         check_bars_complete(assets),
@@ -120,6 +166,7 @@ def run_all(assets, predictions, shown_keys, signals, summary):
         check_required_assets(shown_keys),
         check_entry_reference(signals),
         check_scoring_sanity(summary),
+        check_parity([a for a in assets if a.get("kind") == "fx"]),
     ]
     ng = [c for c in checks if not c["ok"]]
     return {

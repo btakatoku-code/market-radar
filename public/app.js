@@ -1648,11 +1648,17 @@ function selfCheckCard(d) {
       <span class="muted">${esc((sc.checked_at || '').slice(5, 16).replace('T', ' '))}</span></div>
     <p class="muted" style="margin:6px 0 10px">
       更新のたびに機械が確かめています。これまで不具合はすべて人が偶然見つけたもので、
-      アプリ自身は気づけませんでした。その反省で入れた仕組みです。</p>
+      アプリ自身は気づけませんでした。その反省で入れた仕組みです。
+      とくに最後の項目は、<b>過去のある日までのデータだけを実運用の経路に渡し、
+      検証の経路と同じ予測が出るか</b>を直接照合します。既知の症状を見張るだけでは
+      次の不具合を捕まえられないためです。この検査自体が効くことは、
+      わざと不具合を戻して確認しています（tests/test_parity.py）。</p>
     <ul class="checks" style="grid-template-columns:1fr">
       ${sc.checks.map(c => `<li class="${c.ok ? 'yes' : 'no'}">${c.ok ? '✓' : '✕'} ${esc(c.name)}
         <br><span class="muted" style="font-size:11.5px">${esc(c.detail)}</span>
-        ${c.ok ? '' : `<br><span class="muted" style="font-size:11.5px">${esc(c.why)}</span>`}</li>`).join('')}
+        ${c.ok ? '' : `<br><span class="muted" style="font-size:11.5px">${esc(c.why)}</span>`}
+        ${(c.results || []).length ? `<br><span class="muted" style="font-size:11px">${
+          c.results.map(r => `${r.offset}本前 ${r.n - r.failed}/${r.n}一致`).join(' · ')}</span>` : ''}</li>`).join('')}
     </ul>
     ${ng.length ? `<p class="muted" style="margin-top:9px">
       異常があるときは、その数字を売買の判断に使わないでください。</p>` : ''}</div>`;
