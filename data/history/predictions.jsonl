@@ -885,3 +885,4 @@
 {"date": "2026-09-09", "ts": 1788886592, "key": "EURGBP=X", "name": "ユーロ/ポンド", "bucket": "fx_watch", "horizon": 1, "price": 0.8591300249099731, "pred": -2.621466609390001e-05, "prob": 0.5222743972728237, "rank": null, "due": 1788972992, "actual": null}
 {"date": "2026-09-09", "ts": 1788896482, "key": "CVX", "name": "シェブロン", "bucket": "top5", "horizon": 21, "price": 208.6, "pred": 0.007266349901548079, "prob": 0.5394205302442548, "rank": 4, "due": 1791402082, "actual": null}
 {"date": "2026-09-09", "ts": 1788896482, "key": "4180.T", "name": "Appier Group", "bucket": "category", "horizon": 21, "price": 1473.0, "pred": 0.03084706539745905, "prob": 0.5292615373547714, "rank": 2, "due": 1791402082, "actual": null}
+{"date": "2026-09-09", "ts": 1788908669, "key": "USDJPY=X", "name": "米ドル/円", "bucket": "fx", "horizon": 1, "price": 153.85499572753906, "pred": 0.00024957466502625067, "prob": 0.5633074124726509, "rank": null, "due": 1788995069, "actual": null}
