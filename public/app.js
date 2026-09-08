@@ -211,6 +211,134 @@ function rsiChart(ic) {
    プロが実際に見ている道具なので表示する。ただし「効く」とは書かない。
    このアプリでは、テクニカルの裏付けと的中率に関係が見られなかった。
    フィボナッチについても、測定結果が支持したときだけ効果を主張する。 */
+
+/* ---------- EMA・ボリンジャーバンド・一目均衡表 ----------
+   プロが実際に見ている道具なので、値と図を出す。
+   ただし「効く」とは書かない。このアプリではテクニカルの裏付けと
+   的中率に関係が見られず、フィボナッチも波の取り方を変えると崩れた。
+   同じ検証を通していないものに、効果があるとは書かない。 */
+function overlayChart(ch, kind, height) {
+  if (!ch || !ch.c || ch.c.length < 2) return '';
+  const c = ch.c, n = c.length;
+  const H = height || 132, W = 320, PAD_T = 8, PAD_B = 16, PAD_R = 46;
+  const plotW = W - PAD_R, plotH = H - PAD_T - PAD_B;
+  const series = {
+    ema: [ch.ema20, ch.ema50],
+    bb: [ch.bb_up, ch.bb_low],
+    ichi: [ch.ichi_a, ch.ichi_b, ch.ichi_tenkan, ch.ichi_kijun],
+  }[kind] || [];
+  const all = c.concat(...series.map(a => (a || []).filter(v => v != null)));
+  if (!all.length) return '';
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if (hi === lo) { hi = lo * 1.01 || 1; lo = lo * 0.99 || 0; }
+  const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+  const X = i => (i / (n - 1)) * plotW;
+  const Y = v => PAD_T + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const line = arr => {
+    if (!arr) return '';
+    let d = '', pen = false;
+    for (let i = 0; i < n; i++) {
+      const v = arr[i];
+      if (v == null) { pen = false; continue; }
+      d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1) + ' ';
+      pen = true;
+    }
+    return d.trim();
+  };
+  // 2本の線に挟まれた帯（バンド・雲）
+  const band = (a, b, fill) => {
+    if (!a || !b) return '';
+    const pts = [];
+    for (let i = 0; i < n; i++) if (a[i] != null && b[i] != null) pts.push(i);
+    if (pts.length < 2) return '';
+    let d = 'M';
+    pts.forEach((i, k) => { d += (k ? 'L' : '') + X(i).toFixed(1) + ' ' + Y(a[i]).toFixed(1) + ' '; });
+    for (let k = pts.length - 1; k >= 0; k--) {
+      const i = pts[k];
+      d += 'L' + X(i).toFixed(1) + ' ' + Y(b[i]).toFixed(1) + ' ';
+    }
+    return `<path d="${d}Z" fill="${fill}" stroke="none"/>`;
+  };
+  const col = c[n - 1] >= c[0] ? 'var(--up)' : 'var(--down)';
+  let over = '';
+  if (kind === 'bb') {
+    over = band(ch.bb_up, ch.bb_low, 'rgba(91,140,255,.13)')
+      + `<path d="${line(ch.bb_up)}" fill="none" stroke="var(--accent)" stroke-width="0.9"
+          stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>
+         <path d="${line(ch.bb_low)}" fill="none" stroke="var(--accent)" stroke-width="0.9"
+          stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>
+         <path d="${line(ch.sma20)}" fill="none" stroke="var(--accent)" stroke-width="1"
+          vector-effect="non-scaling-stroke"/>`;
+  } else if (kind === 'ichi') {
+    over = band(ch.ichi_a, ch.ichi_b, 'rgba(200,132,42,.16)')
+      + `<path d="${line(ch.ichi_kijun)}" fill="none" stroke="var(--pf-same)" stroke-width="1"
+          vector-effect="non-scaling-stroke"/>
+         <path d="${line(ch.ichi_tenkan)}" fill="none" stroke="var(--accent)" stroke-width="1"
+          vector-effect="non-scaling-stroke"/>`;
+  } else {
+    over = `<path d="${line(ch.ema50)}" fill="none" stroke="var(--tx3)" stroke-width="1"
+          stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>
+         <path d="${line(ch.ema20)}" fill="none" stroke="var(--accent)" stroke-width="1.1"
+          vector-effect="non-scaling-stroke"/>`;
+  }
+  const ticks = [hi - pad, lo + pad].map(v => `
+    <line x1="0" y1="${Y(v).toFixed(1)}" x2="${plotW}" y2="${Y(v).toFixed(1)}"
+      stroke="var(--line)" stroke-width="0.6" stroke-dasharray="2 3"/>
+    <text x="${plotW + 5}" y="${(Y(v) + 3.5).toFixed(1)}" class="ax">${num(v, v >= 1000 ? 0 : v >= 10 ? 1 : 3)}</text>`).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img">
+    ${ticks}${over}
+    <path d="${line(c)}" fill="none" stroke="${col}" stroke-width="1.6"
+      stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${X(n - 1).toFixed(1)}" cy="${Y(c[n - 1]).toFixed(1)}" r="2.4" fill="${col}"/>
+  </svg>`;
+}
+
+function techBlock(s) {
+  const ch = s.chart;
+  if (!ch || !ch.ema20) return '';
+  const last = a => { for (let i = (a || []).length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
+  const px = s.price;
+  const e20 = last(ch.ema20), e50 = last(ch.ema50);
+  const bu = last(ch.bb_up), bl = last(ch.bb_low), bm = last(ch.sma20);
+  const ia = last(ch.ichi_a), ib = last(ch.ichi_b);
+  const tk = last(ch.ichi_tenkan), kj = last(ch.ichi_kijun);
+  const cloudHi = (ia != null && ib != null) ? Math.max(ia, ib) : null;
+  const cloudLo = (ia != null && ib != null) ? Math.min(ia, ib) : null;
+  const pos = cloudHi == null ? '—' : (px > cloudHi ? '雲の上' : px < cloudLo ? '雲の下' : '雲の中');
+  const bbPos = (bu == null) ? '—'
+    : (px > bu ? '上のバンドの外' : px < bl ? '下のバンドの外' : 'バンドの中');
+  const row = (k, v) => `<div class="metric"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+  return `<details class="detail"><summary>チャート分析（EMA・ボリンジャー・一目均衡表）</summary>
+    <p class="muted" style="margin:8px 0 4px;font-size:12px">
+      プロが実際に見ている道具なので値と図を出します。<b>ただし的中率が上がるかは
+      確かめていません。</b>このアプリではテクニカルの裏付けと的中率に関係が見られず、
+      フィボナッチも波の取り方を変えると効果が消えました。同じ検証を通していないものに
+      「効く」とは書きません。</p>
+
+    <div class="sub-lbl">EMA <span class="muted">(20 / 50)</span>
+      <span class="num muted">${e20 != null && e50 != null
+        ? (e20 > e50 ? '20が50の上' : '20が50の下') : '—'}</span></div>
+    ${overlayChart(ch, 'ema')}
+    <div class="metrics">${row('EMA20', num(e20, 4))}${row('EMA50', num(e50, 4))}
+      ${row('いまの値段', num(px, 4))}${row('EMA20との差', e20 ? pct(px / e20 - 1) : '—')}</div>
+
+    <div class="sub-lbl" style="margin-top:12px">ボリンジャーバンド <span class="muted">(20, 2σ)</span>
+      <span class="num muted">${esc(bbPos)}</span></div>
+    ${overlayChart(ch, 'bb')}
+    <div class="metrics">${row('上限', num(bu, 4))}${row('中心', num(bm, 4))}
+      ${row('下限', num(bl, 4))}${row('%B', s.bb_pctb != null ? (s.bb_pctb * 100).toFixed(0) + '%' : '—')}</div>
+
+    <div class="sub-lbl" style="margin-top:12px">一目均衡表 <span class="muted">(9/26/52)</span>
+      <span class="num muted">${esc(pos)}</span></div>
+    ${overlayChart(ch, 'ichi')}
+    <div class="metrics">${row('転換線', num(tk, 4))}${row('基準線', num(kj, 4))}
+      ${row('雲の上端', num(cloudHi, 4))}${row('雲の下端', num(cloudLo, 4))}</div>
+    <p class="muted" style="margin-top:8px;font-size:11.5px">
+      雲は26本先に描くものなので、いまの位置の雲は26本前に計算された値です。
+      そこを取り違えると先読みになるため、過去側の値を参照しています。</p>
+  </details>`;
+}
+
 function fibBlock(f) {
   if (!f || !f.levels || !f.levels.length) return '';
   const px = f.price;
@@ -1552,6 +1680,7 @@ function viewFx(d) {
       ${macdChart(s.ind_chart)}
       ${rsiChart(s.ind_chart)}
       ${preTradeCheck(s, st)}
+      ${techBlock(s)}
       ${fibBlock(s.fib)}
       ${confirmBlock(s.confirm, on)}
       ${timingBlock(s.timing)}

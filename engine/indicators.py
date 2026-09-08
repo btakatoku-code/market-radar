@@ -124,9 +124,13 @@ def atr(highs, lows, closes, n=14):
 
 
 def bollinger(closes, n=20, k=2.0):
-    """中心線, %B, バンド幅 を返す。%B は下限0・上限1に対する位置。"""
+    """中心線, %B, バンド幅, 上限, 下限 を返す。
+
+    %B は下限0・上限1に対する位置。上限と下限は表示に使う。
+    """
     mid = sma(closes, n)
     pctb, width = [None] * len(closes), [None] * len(closes)
+    upper, lower = [None] * len(closes), [None] * len(closes)
     s = s2 = 0.0
     for i, v in enumerate(closes):
         s += v
@@ -142,9 +146,10 @@ def bollinger(closes, n=20, k=2.0):
         if sd == 0:
             continue
         up, lo = m + k * sd, m - k * sd
+        upper[i], lower[i] = up, lo
         pctb[i] = (closes[i] - lo) / (up - lo)
         width[i] = (up - lo) / m
-    return mid, pctb, width
+    return mid, pctb, width, upper, lower
 
 
 def adx(highs, lows, closes, n=14):
@@ -265,6 +270,52 @@ def zscore(xs, n=20):
     return out
 
 
+def ichimoku(highs, lows, closes, conv=9, base=26, span_b=52, shift=26):
+    """一目均衡表。
+
+    転換線   直近9本の (高値+安値)/2
+    基準線   直近26本の (高値+安値)/2
+    先行スパンA  (転換線+基準線)/2 を26本先へ
+    先行スパンB  直近52本の (高値+安値)/2 を26本先へ
+    遅行スパン   終値を26本前へ
+    雲       先行スパンAとBに挟まれた帯
+
+    先行スパンは「26本先に描く」ものなので、いまの足に対応する雲は
+    26本前に計算されたもの。ここを取り違えると先読みになるため、
+    現在位置の雲は past 側の値を参照している。
+    """
+    n = len(closes)
+    def midpoint(k):
+        hh, ll = rolling_max(highs, k), rolling_min(lows, k)
+        return [None if (hh[i] is None or ll[i] is None) else (hh[i] + ll[i]) / 2.0
+                for i in range(n)]
+
+    tenkan = midpoint(conv)
+    kijun = midpoint(base)
+    span_a_raw = [None if (tenkan[i] is None or kijun[i] is None)
+                  else (tenkan[i] + kijun[i]) / 2.0 for i in range(n)]
+    span_b_raw = midpoint(span_b)
+
+    # いまの足の位置にある雲＝shift 本前に計算された値
+    cloud_a = [span_a_raw[i - shift] if i >= shift else None for i in range(n)]
+    cloud_b = [span_b_raw[i - shift] if i >= shift else None for i in range(n)]
+    # 遅行スパン：終値を shift 本前の位置に置く
+    chikou = [closes[i + shift] if i + shift < n else None for i in range(n)]
+
+    above = []
+    for i in range(n):
+        a, b, c = cloud_a[i], cloud_b[i], closes[i]
+        if a is None or b is None or c is None:
+            above.append(None)
+        else:
+            hi, lo = max(a, b), min(a, b)
+            above.append(1 if c > hi else (-1 if c < lo else 0))
+    return {"tenkan": tenkan, "kijun": kijun,
+            "cloud_a": cloud_a, "cloud_b": cloud_b,
+            "span_a_future": span_a_raw, "span_b_future": span_b_raw,
+            "chikou": chikou, "cloud_pos": above}
+
+
 def compute_all(bars):
     """OHLCV から全指標を計算し dict of list で返す。
 
@@ -272,7 +323,10 @@ def compute_all(bars):
     """
     c, h, l, v = bars["c"], bars["h"], bars["l"], bars["v"]
     macd_line, macd_sig, macd_hist = macd(c)
-    bb_mid, bb_pctb, bb_width = bollinger(c)
+    bb_mid, bb_pctb, bb_width, bb_up, bb_low = bollinger(c)
+    # 一目均衡表。compute_all の値は「同じ長さの配列」で揃える約束なので、
+    # 辞書のまま入れず ichi_ を付けて展開する。
+    ichi = ichimoku(h, l, c)
     stoch_k, stoch_d = stochastic(h, l, c)
     ob = obv(c, v)
     vol_sma = sma(v, 20)
@@ -283,10 +337,12 @@ def compute_all(bars):
     return {
         "sma10": sma(c, 10), "sma20": sma(c, 20),
         "sma50": sma(c, 50), "sma200": sma(c, 200),
-        "ema20": ema(c, 20),
+        "ema20": ema(c, 20), "ema12": ema(c, 12), "ema26": ema(c, 26),
+        "ema50": ema(c, 50), "ema200": ema(c, 200),
         "rsi14": rsi(c, 14),
         "macd": macd_line, "macd_signal": macd_sig, "macd_hist": macd_hist,
         "bb_mid": bb_mid, "bb_pctb": bb_pctb, "bb_width": bb_width,
+        "bb_up": bb_up, "bb_low": bb_low,
         "atr14": atr(h, l, c, 14),
         "adx14": adx(h, l, c, 14),
         "stoch_k": stoch_k, "stoch_d": stoch_d,
@@ -295,4 +351,10 @@ def compute_all(bars):
         "vol20": realized_vol(c, 20),
         "dist_high": dist_from_high(c, 252),
         "vol_ratio": vol_ratio,
+        # 一目均衡表。ichi_ を付けて展開する（値はすべて同じ長さの配列）
+        "ichi_tenkan": ichi["tenkan"], "ichi_kijun": ichi["kijun"],
+        "ichi_cloud_a": ichi["cloud_a"], "ichi_cloud_b": ichi["cloud_b"],
+        "ichi_span_a": ichi["span_a_future"], "ichi_span_b": ichi["span_b_future"],
+        "ichi_chikou": ichi["chikou"], "ichi_pos": ichi["cloud_pos"],
     }
+

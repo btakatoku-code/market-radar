@@ -75,6 +75,15 @@ def _chart(a, n=CHART_BARS):
         "c": [round(x, r) for x in c],
         "sma20": [None if x is None else round(x, r) for x in ind["sma20"][-n:]],
         "sma50": [None if x is None else round(x, r) for x in ind["sma50"][-n:]],
+        # EMA・ボリンジャー・一目均衡表。チャートに重ねて描くための系列。
+        "ema20": [None if x is None else round(x, r) for x in ind["ema20"][-n:]],
+        "ema50": [None if x is None else round(x, r) for x in ind["ema50"][-n:]],
+        "bb_up": [None if x is None else round(x, r) for x in ind["bb_up"][-n:]],
+        "bb_low": [None if x is None else round(x, r) for x in ind["bb_low"][-n:]],
+        "ichi_a": [None if x is None else round(x, r) for x in ind["ichi_cloud_a"][-n:]],
+        "ichi_b": [None if x is None else round(x, r) for x in ind["ichi_cloud_b"][-n:]],
+        "ichi_tenkan": [None if x is None else round(x, r) for x in ind["ichi_tenkan"][-n:]],
+        "ichi_kijun": [None if x is None else round(x, r) for x in ind["ichi_kijun"][-n:]],
     }
 
 
