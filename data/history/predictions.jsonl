@@ -939,3 +939,4 @@
 {"date": "2026-09-10", "ts": 1788994275, "key": "AVAXUSDT", "name": "アバランチ", "bucket": "category", "horizon": 21, "price": 7.715, "pred": 0.020586523980603854, "prob": 0.5434894493051982, "rank": 3, "due": 1791499875, "actual": null}
 {"date": "2026-09-10", "ts": 1788994275, "key": "EURJPY=X", "name": "ユーロ/円", "bucket": "fx", "horizon": 1, "price": 178.45399475097656, "pred": 0.001201518836516657, "prob": 0.5899541399311847, "rank": null, "due": 1789080675, "actual": null}
 {"date": "2026-09-10", "ts": 1788994275, "key": "EURGBP=X", "name": "ユーロ/ポンド", "bucket": "fx", "horizon": 1, "price": 0.8585100173950195, "pred": -0.00018899476631074522, "prob": 0.5776454675644507, "rank": null, "due": 1789080675, "actual": null}
+{"date": "2026-09-10", "ts": 1789001031, "key": "NZDUSD=X", "name": "NZドル/米ドル", "bucket": "fx", "horizon": 1, "price": 0.585871160030365, "pred": -0.0013340628054360239, "prob": 0.6357077479670593, "rank": null, "due": 1789087431, "actual": null}
