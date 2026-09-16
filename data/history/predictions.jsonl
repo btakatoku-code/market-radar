@@ -1165,3 +1165,4 @@
 {"date": "2026-09-16", "ts": 1789509029, "key": "9432.T", "name": "NTT", "bucket": "top5", "horizon": 21, "price": 178.1, "pred": 0.007025174030613565, "prob": 0.5297151719909106, "rank": 4, "due": 1792014629, "actual": null}
 {"date": "2026-09-16", "ts": 1789509029, "key": "8766.T", "name": "東京海上ホールディングス", "bucket": "top5", "horizon": 21, "price": 8079.0, "pred": 0.010011587572208571, "prob": 0.5543607800650054, "rank": 5, "due": 1792014629, "actual": null}
 {"date": "2026-09-16", "ts": 1789509029, "key": "9432.T", "name": "NTT", "bucket": "category", "horizon": 21, "price": 178.1, "pred": 0.007025174030613565, "prob": 0.5297151719909106, "rank": 3, "due": 1792014629, "actual": null}
+{"date": "2026-09-16", "ts": 1789520076, "key": "XRPUSDT", "name": "リップル", "bucket": "category", "horizon": 21, "price": 1.421, "pred": 0.02086742321024137, "prob": 0.5435080507022954, "rank": 3, "due": 1792025676, "actual": null}
