@@ -1257,3 +1257,4 @@
 {"date": "2026-09-18", "ts": 1789665793, "key": "GBPUSD=X", "name": "ポンド/米ドル", "bucket": "fx_watch", "horizon": 1, "price": 1.3473457098007202, "pred": 2.8986106027703127e-05, "prob": 0.5017874119363503, "rank": null, "due": 1789924993, "actual": null}
 {"date": "2026-09-18", "ts": 1789681853, "key": "7181.T", "name": "かんぽ生命保険", "bucket": "top5", "horizon": 21, "price": 1813.5, "pred": 0.006084063144315422, "prob": 0.5396622473336492, "rank": 3, "due": 1792360253, "actual": null}
 {"date": "2026-09-18", "ts": 1789681853, "key": "7181.T", "name": "かんぽ生命保険", "bucket": "category", "horizon": 21, "price": 1813.5, "pred": 0.006084063144315422, "prob": 0.5396622473336492, "rank": 2, "due": 1792360253, "actual": null}
+{"date": "2026-09-18", "ts": 1789692885, "key": "LINKUSDT", "name": "チェーンリンク", "bucket": "category", "horizon": 21, "price": 11.0474, "pred": 0.0300115490266172, "prob": 0.5710084033613445, "rank": 3, "due": 1792371285, "actual": null}
