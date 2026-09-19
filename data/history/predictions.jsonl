@@ -1304,3 +1304,4 @@
 {"date": "2026-09-19", "ts": 1789772151, "key": "4704.T", "name": "トレンドマイクロ", "bucket": "category", "horizon": 21, "price": 6609.0, "pred": 0.014773053199923869, "prob": 0.5501661129568106, "rank": 3, "due": 1792364151, "actual": null}
 {"date": "2026-09-19", "ts": 1789772151, "key": "1321.T", "name": "日経225連動型上場投資信託", "bucket": "category", "horizon": 21, "price": 67390.0, "pred": 0.006263836085100553, "prob": 0.5398902125855015, "rank": 3, "due": 1792364151, "actual": null}
 {"date": "2026-09-19", "ts": 1789772151, "key": "NZDUSD=X", "name": "NZドル/米ドル", "bucket": "fx", "horizon": 1, "price": 0.572819709777832, "pred": 0.0006566765936067588, "prob": 0.6333432846756578, "rank": null, "due": 1789944951, "actual": null}
+{"date": "2026-09-19", "ts": 1789778908, "key": "AVAXUSDT", "name": "アバランチ", "bucket": "category", "horizon": 21, "price": 7.6112, "pred": 0.014811529826163634, "prob": 0.5398865992335239, "rank": 2, "due": 1792370908, "actual": null}
