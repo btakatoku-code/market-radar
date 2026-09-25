@@ -1536,3 +1536,4 @@
 {"date": "2026-09-25", "ts": 1790286906, "key": "XRPUSDT", "name": "リップル", "bucket": "category", "horizon": 21, "price": 1.5457, "pred": 0.022861625399441674, "prob": 0.5307761035448663, "rank": 3, "due": 1792965306, "actual": null}
 {"date": "2026-09-25", "ts": 1790286906, "key": "NZDUSD=X", "name": "NZドル/米ドル", "bucket": "fx", "horizon": 1, "price": 0.5674499273300171, "pred": 0.000524942472321479, "prob": 0.5905884410426093, "rank": null, "due": 1790546106, "actual": null}
 {"date": "2026-09-25", "ts": 1790286906, "key": "GBPUSD=X", "name": "ポンド/米ドル", "bucket": "fx", "horizon": 1, "price": 1.3241524696350098, "pred": 0.0003839674542791162, "prob": 0.5785547257783623, "rank": null, "due": 1790546106, "actual": null}
+{"date": "2026-09-25", "ts": 1790298110, "key": "ETHUSDT", "name": "イーサリアム", "bucket": "category", "horizon": 21, "price": 2684.6919, "pred": 0.014097536805997518, "prob": 0.5307768467315448, "rank": 3, "due": 1792976510, "actual": null}
