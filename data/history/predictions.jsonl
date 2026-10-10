@@ -2135,3 +2135,4 @@
 {"date": "2026-10-10", "ts": 1791575732, "key": "EURJPY=X", "name": "ユーロ/円", "bucket": "fx", "horizon": 1, "price": 177.22999572753906, "pred": 0.0005873125039161826, "prob": 0.5664720894473196, "rank": null, "due": 1791748532, "actual": null}
 {"date": "2026-10-10", "ts": 1791575732, "key": "EURGBP=X", "name": "ユーロ/ポンド", "bucket": "fx", "horizon": 1, "price": 0.8474599719047546, "pred": 0.00016590125984783285, "prob": 0.5641352124454659, "rank": null, "due": 1791748532, "actual": null}
 {"date": "2026-10-10", "ts": 1791575732, "key": "GBPUSD=X", "name": "ポンド/米ドル", "bucket": "fx_watch", "horizon": 1, "price": 1.322908878326416, "pred": 2.7263822415935425e-05, "prob": 0.5, "rank": null, "due": 1791748532, "actual": null}
+{"date": "2026-10-10", "ts": 1791591868, "key": "SOLUSDT", "name": "ソラナ", "bucket": "category", "horizon": 21, "price": 109.4423, "pred": 0.020588664096734263, "prob": 0.5691757779646762, "rank": 3, "due": 1794183868, "actual": null}
