@@ -2170,3 +2170,4 @@
 {"date": "2026-10-11", "ts": 1791659054, "key": "EURJPY=X", "name": "ユーロ/円", "bucket": "fx", "horizon": 1, "price": 177.22999572753906, "pred": 0.0006136030868070171, "prob": 0.5703144994173085, "rank": null, "due": 1791745454, "actual": null}
 {"date": "2026-10-11", "ts": 1791659054, "key": "EURGBP=X", "name": "ユーロ/ポンド", "bucket": "fx", "horizon": 1, "price": 0.8474599719047546, "pred": 0.00017205612828720862, "prob": 0.5667307472798915, "rank": null, "due": 1791745454, "actual": null}
 {"date": "2026-10-11", "ts": 1791659054, "key": "GBPUSD=X", "name": "ポンド/米ドル", "bucket": "fx_watch", "horizon": 1, "price": 1.322908878326416, "pred": 2.7263822415935425e-05, "prob": 0.5, "rank": null, "due": 1791745454, "actual": null}
+{"date": "2026-10-11", "ts": 1791676801, "key": "AVAXUSDT", "name": "アバランチ", "bucket": "category", "horizon": 21, "price": 10.354, "pred": 0.05344893923120844, "prob": 0.597, "rank": 2, "due": 1794182401, "actual": null}
