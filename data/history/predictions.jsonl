@@ -2429,3 +2429,4 @@
 {"date": "2026-10-17", "ts": 1792187448, "key": "9766.T", "name": "コナミグループ", "bucket": "category", "horizon": 21, "price": 24845.0, "pred": 0.009238998173517343, "prob": 0.5388674977786154, "rank": 3, "due": 1794779448, "actual": null}
 {"date": "2026-10-17", "ts": 1792187448, "key": "LINKUSDT", "name": "チェーンリンク", "bucket": "category", "horizon": 21, "price": 12.303, "pred": 0.03307282237645808, "prob": 0.5703519540051278, "rank": 3, "due": 1794779448, "actual": null}
 {"date": "2026-10-17", "ts": 1792187448, "key": "EURGBP=X", "name": "ユーロ/ポンド", "bucket": "fx", "horizon": 1, "price": 0.8448299765586853, "pred": 3.369574737195619e-05, "prob": 0.5754093117630877, "rank": null, "due": 1792360248, "actual": null}
+{"date": "2026-10-17", "ts": 1792198495, "key": "ADAUSDT", "name": "カルダノ", "bucket": "category", "horizon": 21, "price": 0.2297, "pred": 0.033731538764881344, "prob": 0.5703519540051278, "rank": 3, "due": 1794790495, "actual": null}
