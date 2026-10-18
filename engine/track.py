@@ -86,6 +86,59 @@ def _price_at_or_after(bars, ts):
     return None, None
 
 
+LONG_BUCKETS = ("top5", "pinned", "category")
+
+
+def _close_at_or_before(bars, ts):
+    """ts 以前で最後のバーの終値（予測した時点の値段）。無ければ None。"""
+    from bisect import bisect_right
+    t = bars["t"]
+    i = bisect_right(t, ts) - 1
+    return bars["c"][i] if i >= 0 else None
+
+
+def _close_at_or_after(bars, ts):
+    from bisect import bisect_left
+    t = bars["t"]
+    i = bisect_left(t, ts)
+    return bars["c"][i] if i < len(t) else None
+
+
+def bench_return(assets_by_key, ts, due):
+    """同じ期間に、対象の全銘柄（指数・FX・レバレッジ型を除く）を均等に持った場合の平均リターン。
+
+    **株の TOP5 の比べる相手。** 「何もせず全部を持っていたら」より良くなければ、選んだ意味は無い。
+    （2026-10-18 に追加。それまでは比べる相手が無く、相場全体の上げ下げと区別できなかった）"""
+    rets = []
+    for a in assets_by_key.values():
+        if a.get("kind") in ("index", "fx") or a.get("leveraged"):
+            continue
+        bars = a.get("bars")
+        if not bars or not bars.get("t"):
+            continue
+        p0, p1 = _close_at_or_before(bars, ts), _close_at_or_after(bars, due)
+        if p0 and p1:
+            rets.append(p1 / p0 - 1)
+    return (sum(rets) / len(rets), len(rets)) if len(rets) >= 20 else (None, len(rets))
+
+
+def add_bench(predictions, assets_by_key):
+    """採点済みの株の予測に、同じ期間の全銘柄平均（bench）を付ける。付いていないものだけ。"""
+    cache = {}
+    added = 0
+    for r in predictions:
+        if r.get("bucket") not in LONG_BUCKETS or r.get("actual") is None or r.get("bench") is not None:
+            continue
+        k = (r.get("ts"), r.get("due"))
+        if k not in cache:
+            cache[k] = bench_return(assets_by_key, r["ts"], r["due"])
+        b, n = cache[k]
+        if b is not None:
+            r["bench"], r["bench_n"] = b, n
+            added += 1
+    return added
+
+
 def score(predictions, assets_by_key, now_ts):
     """期限が来た予測を採点する。predictions は破壊的に更新される。"""
     scored = 0
@@ -107,6 +160,7 @@ def score(predictions, assets_by_key, now_ts):
         r["hit"] = bool((pred > 0) == (actual > 0)) if pred != 0 else None
         r["error"] = actual - pred
         scored += 1
+    add_bench(predictions, assets_by_key)
     return scored
 
 
@@ -134,10 +188,52 @@ def _stats(rows):
     mg = sum(gains) / n
     # 損益のばらつき。的中率だけでなく損益も監視するのに使う。
     sd = (sum((g - mg) ** 2 for g in gains) / (n - 1)) ** 0.5 if n > 1 else 0.0
-    return dict(n=n, hit_rate=hits / n, mean_pred=mean_pred,
-                mean_actual=mean_actual, mean_abs_error=mean_abs_err,
-                mean_gain=mg, sd_gain=sd,
-                pending=sum(1 for r in rows if r.get("actual") is None))
+    out = dict(n=n, hit_rate=hits / n, mean_pred=mean_pred,
+               mean_actual=mean_actual, mean_abs_error=mean_abs_err,
+               mean_gain=mg, sd_gain=sd,
+               pending=sum(1 for r in rows if r.get("actual") is None))
+    out.update(_by_day(done))
+    return out
+
+
+def _cluster(values_by_day):
+    """日ごとの平均を1件と数えて、平均と95%の幅（日数が2以上のとき）。"""
+    vals = list(values_by_day.values())
+    d = len(vals)
+    if d == 0:
+        return None, None, None
+    m = sum(vals) / d
+    if d < 2:
+        return m, None, None
+    sd = (sum((v - m) ** 2 for v in vals) / (d - 1)) ** 0.5
+    w = 1.96 * sd / d ** 0.5
+    return m, m - w, m + w
+
+
+def _by_day(done):
+    """**同じ日の予測はまとめて1回と数える**（2026-10-18 追加）。
+
+    同じ日に出した予測は、同じ相場の動きに一緒に引きずられる。株の TOP5 は68件あっても
+    判断した日は9日しかなく、1件ずつ数えると確かさを実際より大きく見せてしまう。
+    ここでは日ごとの平均を1件とし、その日数で95%の幅を出す。
+    全銘柄平均（bench）が付いていれば、それとの差（超過）も同じ数え方で出す。"""
+    days = {}
+    for r in done:
+        days.setdefault(r.get("date"), []).append(r)
+    hit = {k: sum(1 for r in v if r["hit"]) / len(v) for k, v in days.items()}
+    gain = {k: sum(r["actual"] * (1 if r["pred"] > 0 else -1) for r in v) / len(v) for k, v in days.items()}
+    out = {"days": len(days)}
+    out["hit_day"], out["hit_day_lo"], out["hit_day_hi"] = _cluster(hit)
+    out["gain_day"], out["gain_day_lo"], out["gain_day_hi"] = _cluster(gain)
+    with_b = {k: [r for r in v if r.get("bench") is not None] for k, v in days.items()}
+    ex = {k: sum(r["actual"] - r["bench"] for r in v) / len(v) for k, v in with_b.items() if v}
+    if ex:
+        out["bench_days"] = len(ex)
+        out["bench_mean"] = sum(sum(r["bench"] for r in v) / len(v) for v in with_b.values() if v) / len(ex)
+        out["excess_day"], out["excess_day_lo"], out["excess_day_hi"] = _cluster(ex)
+        allb = [r for v in with_b.values() for r in v]
+        out["beat_rate"] = sum(1 for r in allb if r["actual"] > r["bench"]) / len(allb)
+    return out
 
 
 def _after_fix(rows):
@@ -159,12 +255,22 @@ def summary(predictions):
     """枠ごと・直近の的中率をまとめる。"""
     # 不具合の修正より後の予測だけで採点する。混ぜると直した後の成績が汚れる。
     valid = _after_fix(predictions)
-    out = {"overall": _stats(valid)}
+    valid_ids = {id(r) for r in valid}
+    # 修正前の分は捨てずに別枠で持つ（隠すためではなく、分けるため）
+    before = [r for r in predictions if id(r) not in valid_ids]
+    # **週末に記録されたFXの予測は数えない**（2026-10-18）。日足のまま金曜のシグナルが出続け、
+    # 金曜〜月曜の同じ値動きを2〜3回数えていた。記録は残し（追記のみの約束）、集計から外して件数を示す。
+    weekend_fx = [r for r in valid if r["bucket"] in ("fx", "fx_watch") and _is_weekend(r.get("date"))]
+    we_ids = {id(r) for r in weekend_fx}
+    valid = [r for r in valid if id(r) not in we_ids]
+    # **「全体」から指定銘柄（常に表示する大型株）を外す**（2026-10-18）。指定銘柄はスコアに
+    # 関係なく毎回表示するので、相場全体が上がれば「当たり」になる。混ぜるとモデルの的中率が
+    # 実力より良く見える（実際、9/8 以降で指定銘柄は91%、TOP5 は31%だった）。
+    out = {"overall": _stats([r for r in valid if r["bucket"] != "pinned"]),
+           "overall_note": "全体は指定銘柄を除く（指定銘柄は相場全体の上げ下げで当たり外れが決まるため）"}
     for bucket in ("top5", "pinned", "category", "fx", "fx_watch"):
         rows = [r for r in valid if r["bucket"] == bucket]
         out[bucket] = _stats(rows)
-    # 修正前の分は捨てずに別枠で持つ（隠すためではなく、分けるため）
-    before = [r for r in predictions if r not in valid]
     out["before_fix"] = {
         "fx": _stats([r for r in before if r["bucket"] == "fx"]),
         "overall": _stats(before),
@@ -189,7 +295,33 @@ def summary(predictions):
     out["per_asset"] = per_asset[:40]
     out["total_logged"] = len(valid)
     out["total_before_fix"] = len(before)
+    out["fx_weekend_excluded"] = sum(1 for r in weekend_fx if r["bucket"] == "fx")
+    out["fx_bias"] = direction_bias([r for r in valid if r["bucket"] == "fx"])
     return out
+
+
+def _is_weekend(date_str):
+    import datetime
+    try:
+        return datetime.date.fromisoformat(str(date_str)).weekday() >= 5
+    except ValueError:
+        return False
+
+
+def direction_bias(rows):
+    """FXの予測の向きの偏り（2026-10-18）。上と下の件数・それぞれの的中率・実際に上がった割合。
+
+    9/8 以降の平日、予測は上50件・下7件と大きく偏っていた。実際に上がったのは49%で、上の予測の
+    的中は52%。偏りが相場（上げが続いた）によるのか、モデルの癖なのかを見分けるために並べる。"""
+    done = [r for r in rows if r.get("actual") is not None and r.get("hit") is not None]
+    if not done:
+        return None
+    up = [r for r in done if r["pred"] > 0]
+    dn = [r for r in done if r["pred"] < 0]
+    return {"n": len(done), "up_n": len(up), "down_n": len(dn),
+            "up_hit": (sum(r["hit"] for r in up) / len(up)) if up else None,
+            "down_hit": (sum(r["hit"] for r in dn) / len(dn)) if dn else None,
+            "actual_up_share": sum(1 for r in done if r["actual"] > 0) / len(done)}
 
 
 RUNS_FILE = os.path.join(HISTORY_DIR, "runs.jsonl")

@@ -584,7 +584,7 @@ function itemCard(x, showRank, chartH) {
       </div>
       <div class="item-fig">
         <div class="pct ${cls(net)}">${pct(net)}</div>
-        <div class="pr">コスト後 · ${price(x.price, x.currency)}</div>
+        <div class="pr">${showRank ? '予測（参考）· ' : ''}コスト後 · ${price(x.price, x.currency)}</div>
       </div>
     </div>
     <div class="gross-row">
@@ -839,7 +839,7 @@ function viewHome(d) {
 
   const stH = settings();
   const fxAll = ((d.fx && d.fx.signals) || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= stH.fxConf && !d.fx_halted,
+    tradeable: x.confidence >= stH.fxConf && !d.fx_halted && !d.fx_closed,
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
     || b.confidence - a.confidence);
@@ -897,10 +897,35 @@ function viewHome(d) {
   </div>`;
 }
 
+/* ---------- 株の上位候補の正直な位置づけ（2026-10-18）----------
+   検証でも基準線を上回らないモデルの「予測%」を大きく出していた。配信後の実績は、
+   同じ日に全銘柄を均等に持った場合と比べ、判断した日の数で確かさを測って出す。 */
+function honestyTop5(d) {
+  const t = (d.accuracy || {}).top5, bl = d.baseline_long;
+  const parts = [];
+  if (bl && bl.hit_rate != null && bl.base_up_rate != null) {
+    parts.push(`過去${bl.dates || ''}時点の検証では、モデルの的中率 ${(bl.hit_rate * 100).toFixed(1)}% に対し、`
+      + `何もせず買った場合 ${(bl.base_up_rate * 100).toFixed(1)}%。<b>基準線を上回っていません。</b>`);
+  }
+  if (t && t.n) {
+    let s = `配信後の実績：判断した日 ${t.days ?? '—'}日・${t.n}件で、1日あたり平均 ${pct(t.gain_day ?? t.mean_gain)}`;
+    if (t.bench_mean != null) {
+      s += `（同じ日に全銘柄を均等に持った場合 ${pct(t.bench_mean)}、差 ${pct(t.excess_day)}`
+        + (t.excess_day_lo != null ? `［95%の幅 ${pct(t.excess_day_lo)}〜${pct(t.excess_day_hi)}］` : '') + '）';
+    } else if (t.gain_day_lo != null) {
+      s += `［95%の幅 ${pct(t.gain_day_lo)}〜${pct(t.gain_day_hi)}］`;
+    }
+    if ((t.days || 0) < 20) s += `。判断した日が${t.days}日しかなく、まだ結論は出せません`;
+    parts.push(s + '。');
+  }
+  return `<div class="banner warn"><strong>正直なところ</strong>${parts.join(' ')}
+    下の予測％は<b>参考値</b>で、この順に買えば勝てるという意味ではありません。</div>`;
+}
+
 function viewTop5(d) {
   const items = (d.top5 || []).map(x => itemCard(x, true, 150)).join('');
   const dv = d.diversification;
-  return `<div class="banner"><strong>選び方</strong>
+  return `${honestyTop5(d)}<div class="banner"><strong>選び方</strong>
     PayPay証券で買える銘柄のうち、流動性と値動きの荒さ（年率ボラ60%以下）の条件を満たすものから、
     トレンド・勢い・相対強度・過去の類似局面を合成して並べ、
     <b>値動きが重複する銘柄は除いています</b>。予測期間は${esc(d.horizon_long_label || '')}先。
@@ -1593,6 +1618,60 @@ function pfBlock(pf, st, title, note) {
     ${warn}</div>`;
 }
 
+/* ---------- FXボードの今日の判断（2026-10-19）----------
+   このアプリのFXと、FX判断支援（FXボード）が別々の銘柄に別々の答えを出し、
+   結局どうするかが分からなかった。FXボードは、このアプリの24時間予測も材料にして、
+   決まった順（市場→材料の鮮度→時刻→そろった銘柄と計画→このアプリの向き）で答えを1つ出す。
+   その答えを公開ページの status.json から読み、FXタブの一番上に出す。 */
+const FXBOARD_STATUS = 'https://btakatoku-ops.github.io/fx-ai-system/status.json';
+
+async function fillBoardDecision() {
+  const el = document.getElementById('fxboard-decision');
+  if (!el) return;
+  try {
+    const r = await fetch(FXBOARD_STATUS + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const s = await r.json();
+    const d = s.decision;
+    if (!d) { el.innerHTML = ''; return; }
+    const age = (Date.now() - Date.parse(s.generated_at)) / 60000;
+    const tone = d.verdict === 'candidate' ? 'info' : 'warn';
+    el.innerHTML = `<div class="banner ${tone}"><strong>今日のFXの判断（FXボード・${esc(s.generated_jst || '')}）</strong>
+      <b>${esc(d.title || '')}</b> ${esc(d.lead || '')}
+      ${(d.reasons || []).length ? '<br>主な理由：' + d.reasons.map(esc).join('、') : ''}
+      ${d.next_look_label ? '<br>次に見る時刻：' + esc(d.next_look_label) : ''}
+      ${age > 60 ? `<br><span class="muted">FXボードの更新が${Math.round(age)}分止まっています（PCの電源か、取引時間外）。</span>` : ''}
+      <br><span class="muted">FXボードは、このアプリの24時間予測も材料にして判断しています。
+      下のシグナルと食い違うときは、<b>FXボードの判断を優先</b>してください。見送りも正しい判断です。</span></div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="banner"><strong>今日のFXの判断</strong>FXボードの状態を読めませんでした（${esc(e.message)}）。</div>`;
+  }
+}
+
+function fxClosedBanner(d) {
+  if (!d.fx_closed) return '';
+  return `<div class="banner warn"><strong>週末で市場が閉まっています</strong>
+    FXの予測は日足で作るため、週末は金曜の足のまま同じ結果になります。シグナルは出さず、記録もしません。
+    月曜の朝（日本時間 7:00 以降）の更新から再開します。</div>`;
+}
+
+function biasCard(d) {
+  const a = d.accuracy || {}, b = a.fx_bias;
+  if (!b || !b.n) return '';
+  const pc = v => v == null ? '—' : (v * 100).toFixed(0) + '%';
+  const skew = Math.max(b.up_n, b.down_n) / b.n;
+  return `<div class="card"><h2>予測の向きの偏り</h2>
+    <div class="metrics">
+      <div class="metric"><span class="k">上の予測</span><span class="v">${b.up_n}件</span></div>
+      <div class="metric"><span class="k">上の的中</span><span class="v">${pc(b.up_hit)}</span></div>
+      <div class="metric"><span class="k">下の予測</span><span class="v">${b.down_n}件</span></div>
+      <div class="metric"><span class="k">下の的中</span><span class="v">${pc(b.down_hit)}</span></div>
+    </div>
+    <p class="muted" style="margin:8px 0 0">同じ期間に実際に上がった割合は ${pc(b.actual_up_share)}。${
+      skew >= 0.75 ? `<b>予測が${b.up_n >= b.down_n ? '上' : '下'}に大きく偏っています。</b>偏りがモデルの癖なのか、その時期の相場によるのかは、件数が増えるまで分かりません。` : ''}
+      ${a.fx_weekend_excluded ? `週末に記録された${a.fx_weekend_excluded}件は、金曜〜月曜の同じ値動きの重複なので数えていません。` : ''}</p></div>`;
+}
+
 function viewFx(d) {
   const base = d.fx && d.fx.plan;
   if (!base) return '<p class="empty">FXデータがありません</p>';
@@ -1603,8 +1682,9 @@ function viewFx(d) {
   const barCol = ratio < 30 ? 'var(--down)' : ratio < 80 ? 'var(--warn)' : 'var(--up)';
   const m = base.measured || {};
   const all = (d.fx.signals || []).map(x => Object.assign({}, x, {
-    tradeable: x.confidence >= st.fxConf && !d.fx_halted,
-    status: d.fx_halted ? '停止中'
+    tradeable: x.confidence >= st.fxConf && !d.fx_halted && !d.fx_closed,
+    // 週末は金曜の足のままなので、確信度に関係なくシグナルにしない（2026-10-18）
+    status: d.fx_halted ? '停止中' : d.fx_closed ? '市場休止（週末）'
       : (x.confidence >= st.fxConf ? 'シグナルあり' : '見送り'),
   })).sort((a, b) => (b.expected_hit || 0) - (a.expected_hit || 0)
     || ((b.confirm && b.confirm.level) || 0) - ((a.confirm && a.confirm.level) || 0)
@@ -1706,7 +1786,12 @@ function viewFx(d) {
     </article>`;
   }).join('');
 
-  return staleBanner(d) + haltBanner(d) + entryWindowCard(d) + `<div class="banner info"><strong>FXは検証で優位性が確認できた唯一の枠です</strong>
+  const live = (d.accuracy || {}).fx;
+  const liveTxt = live && live.n
+    ? `<b>ただし配信後の実績は ${live.n}件（${live.days ?? '—'}日）で的中${(live.hit_rate * 100).toFixed(1)}%で、まだ検証の数字に届いていません。</b>`
+    : '';
+  return '<div id="fxboard-decision"></div>' + fxClosedBanner(d) + staleBanner(d) + haltBanner(d) + entryWindowCard(d) + `<div class="banner info"><strong>FXは過去の検証で優位性が確認できた唯一の枠です</strong>
+    ${liveTxt}
     分析は${d.fx_pool_pairs || 14}ペアで行い、主要${d.fx_signal_pairs || 5}ペアを毎日表示します。
     いま選んでいる確信度${(st.fxConf * 100).toFixed(0)}%以上での実測は
     <b>勝率${lv ? (lv.hit * 100).toFixed(1) + '%' : '—'}</b>
@@ -1872,20 +1957,27 @@ function monitorCard(d) {
 
 function viewAcc(d) {
   const a = d.accuracy || {}, v = VALID;
+  // 件数は「件（判断した日）」。同じ日の予測は同じ相場に一緒に引きずられるので、
+  // 確かさは日数で見る（95%の幅も日ごとの平均から出す）。株は全銘柄平均との差も並べる。
   const stat = (s, label) => {
-    if (!s) return `<tr><td>${label}</td><td colspan="3" class="muted">まだ実績なし</td></tr>`;
-    return `<tr><td>${label}</td><td class="num">${s.n}</td>
-      <td class="num ${s.hit_rate >= 0.5 ? 'up' : 'down'}">${(s.hit_rate * 100).toFixed(1)}%</td>
-      <td class="num ${cls(s.mean_gain)}">${pct(s.mean_gain)}</td></tr>`;
+    if (!s) return `<tr><td>${label}</td><td colspan="4" class="muted">まだ実績なし</td></tr>`;
+    const rng = s.hit_day_lo != null
+      ? `<br><span class="muted">${(s.hit_day_lo * 100).toFixed(0)}〜${(s.hit_day_hi * 100).toFixed(0)}%</span>` : '';
+    const ex = s.excess_day != null ? `<span class="${cls(s.excess_day)}">${pct(s.excess_day)}</span>` : '—';
+    return `<tr><td>${label}</td><td class="num">${s.n}<br><span class="muted">${s.days ?? '—'}日</span></td>
+      <td class="num ${s.hit_rate >= 0.5 ? 'up' : 'down'}">${(s.hit_rate * 100).toFixed(1)}%${rng}</td>
+      <td class="num ${cls(s.mean_gain)}">${pct(s.mean_gain)}</td><td class="num">${ex}</td></tr>`;
   };
 
   const live = `<div class="card"><h2>このアプリの実績（配信した予測の採点）</h2>
     <table class="tbl">
-      <tr><th>区分</th><th>件数</th><th>方向的中率</th><th>平均損益</th></tr>
-      ${stat(a.overall, '全体')}${stat(a.top5, 'TOP5')}${stat(a.pinned, '指定銘柄')}
+      <tr><th>区分</th><th>件数<br>（日数）</th><th>方向的中率<br>（日数で見た95%の幅）</th><th>平均損益</th><th>全銘柄平均との差</th></tr>
+      ${stat(a.overall, '全体（指定銘柄を除く）')}${stat(a.top5, 'TOP5')}
       ${stat(a.category, 'ランキング')}${stat(a.fx, 'FX（シグナルあり）')}${stat(a.fx_watch, 'FX（見送り）')}
-      ${stat(a.recent30, '直近30件')}
+      ${stat(a.recent30, '直近30件')}${stat(a.pinned, '指定銘柄（参考）')}
     </table>
+    <p class="muted" style="margin-top:6px">指定銘柄は点数に関係なく毎回表示するので、相場全体が上がれば「当たり」になります。
+      モデルの力ではないため「全体」から外しています。株は、同じ日に全銘柄を均等に持った場合との差で見てください。</p>
     <p class="muted" style="margin-top:9px">記録済み ${(a.total_logged || 0).toLocaleString('ja-JP')} 件
       ／ 採点待ち ${(a.overall && a.overall.pending) ?? a.total_logged ?? 0} 件。
       ${a.overall ? '' : 'FXは翌営業日、株は1か月後に採点されるため、最初の実績が出るまで数日かかります。それまでは下の「進行中の予測」で途中経過を確認できます。'}</p></div>`;
@@ -2103,7 +2195,7 @@ function viewAcc(d) {
 
   const cav = v.caveats.map(c => `<li style="margin-bottom:5px">${esc(c)}</li>`).join('');
 
-  return selfCheckCard(d) + monitorCard(d) + live + prog + cmp + costCard + `
+  return selfCheckCard(d) + monitorCard(d) + biasCard(d) + live + prog + cmp + costCard + `
   <div class="banner"><strong>事前検証の結論</strong>
     株の順位付け: <b class="down">優位性を確認できず</b>／FX: <b class="up">統計的に有意</b>。
     ${esc(v.period)}。予測期間は株${esc(v.horizons ? v.horizons.long : '')}／FX${esc(v.horizons ? v.horizons.fx : '')}。
@@ -2125,7 +2217,7 @@ function render() {
     $('#main').innerHTML = `<p class="empty">表示中にエラーが発生しました<br><span class="muted">${esc(e.message)}</span></p>`;
   }
   bindTradingView();
-  if (VIEW === 'fx') bindSettings();
+  if (VIEW === 'fx') { bindSettings(); fillBoardDecision(); }
   if (VIEW === 'rank') bindChips();
   if (VIEW === 'hold') bindHoldings();
   window.scrollTo({ top: 0, behavior: 'instant' });

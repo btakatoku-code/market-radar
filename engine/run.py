@@ -42,6 +42,18 @@ def _jst(ts):
     return datetime.datetime.fromtimestamp(ts, JST)
 
 
+def fx_market_closed(ts):
+    """為替市場が週末で閉まっているか（日本時間 土曜 6:00 〜 月曜 7:00）。
+
+    FXの予測は日足で作るので、週末は金曜の足のまま同じシグナルが出続ける。それを毎日の
+    予測として記録すると、金曜〜月曜の同じ値動きを2〜3回数えることになる（2026-10-18 に
+    判明。9/8 以降のFXの採点79件のうち22件が週末の重複だった）。週末は記録も表示もしない。
+    夏時間・冬時間のどちらでも閉まっている範囲を取る（閉まるのは 6:00 か 7:00、開くのは同じ）。"""
+    d = _jst(ts)
+    wd, h = d.weekday(), d.hour
+    return (wd == 5 and h >= 6) or wd == 6 or (wd == 0 and h < 7)
+
+
 def _business_days_later(ts, n):
     d = _jst(ts)
     added = 0
@@ -431,6 +443,12 @@ def build(use_cache=False, verbose=True):
     pool_fx = analog.build_pool(fx_assets, config.HORIZON_FX)
     rate_series = ratesmod.load()
     fx_signals = fxmod.signals(fx_assets, pool_fx, rate_series=rate_series)
+    fx_closed = fx_market_closed(now)
+    if fx_closed:
+        # 週末は金曜の足のまま。シグナルとして出さない（記録もしない。下の 6) を参照）
+        for sg in fx_signals:
+            sg["tradeable"] = False
+            sg["status"] = "市場休止（週末）"
     # 建玉の入力はブラウザ側にしかないので、相関表と通貨の対応を渡して
     # アプリ側で計算できるようにする。データに依る部分だけがサーバーの仕事。
     fx_corr = fxrisk.correlations(fx_assets, [a["key"] for a in fx_assets])
@@ -521,8 +539,9 @@ def build(use_cache=False, verbose=True):
     add(pinned, "pinned", due_long, config.HORIZON_LONG)
     for cat in categories:
         add(cat["items"][:3], "category", due_long, config.HORIZON_LONG)
-    add([s for s in fx_signals if s["tradeable"]], "fx", due_fx, config.HORIZON_FX)
-    add([s for s in fx_signals if not s["tradeable"]], "fx_watch", due_fx, config.HORIZON_FX)
+    if not fx_closed:                    # 週末は同じ値動きの重複になるので記録しない
+        add([s for s in fx_signals if s["tradeable"]], "fx", due_fx, config.HORIZON_FX)
+        add([s for s in fx_signals if not s["tradeable"]], "fx_watch", due_fx, config.HORIZON_FX)
 
     n_added = track.append_predictions(rec)
     preds = track.load_predictions()
@@ -621,6 +640,7 @@ def build(use_cache=False, verbose=True):
         "fx_confirmed": fxmod.CONFIRMED,
         "fx_monitor": fx_monitor,
         "fx_halted": halted,
+        "fx_closed": fx_closed,
         "fx_monitor_pnl": monitor.check_pnl(
             (acc_live.get("fx") or {}).get("mean_gain") or 0.0,
             (acc_live.get("fx") or {}).get("sd_gain") or 0.0,
