@@ -2681,3 +2681,4 @@
 {"date": "2026-10-23", "ts": 1792706464, "key": "6758.T", "name": "ソニーグループ", "bucket": "category", "horizon": 21, "price": 4081.0, "pred": 0.005676074153407478, "prob": 0.5381994390103567, "rank": 2, "due": 1795384864, "actual": null}
 {"date": "2026-10-23", "ts": 1792706464, "key": "6702.T", "name": "富士通", "bucket": "category", "horizon": 21, "price": 4573.0, "pred": 0.007446996444422764, "prob": 0.5291239147592739, "rank": 3, "due": 1795384864, "actual": null}
 {"date": "2026-10-23", "ts": 1792706464, "key": "EURGBP=X", "name": "ユーロ/ポンド", "bucket": "fx", "horizon": 1, "price": 0.8386099934577942, "pred": 2.4400404675662128e-05, "prob": 0.5740205993168499, "rank": null, "due": 1792965664, "actual": null}
+{"date": "2026-10-23", "ts": 1792717623, "key": "AVAXUSDT", "name": "アバランチ", "bucket": "category", "horizon": 21, "price": 9.6484, "pred": 0.0320600878453144, "prob": 0.5703212673225984, "rank": 2, "due": 1795396023, "actual": null}
