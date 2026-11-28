@@ -4110,3 +4110,5 @@
 {"date": "2026-11-28", "ts": 1795834845, "key": "4565.T", "name": "ネクセラファーマ", "bucket": "category", "horizon": 21, "price": 2051.0, "pred": 0.02926285706945614, "prob": 0.5280309544282029, "rank": 1, "due": 1798426845, "actual": null}
 {"date": "2026-11-28", "ts": 1795834845, "key": "4502.T", "name": "武田薬品工業", "bucket": "category", "horizon": 21, "price": 7341.0, "pred": 0.010932732191814194, "prob": 0.5280309544282029, "rank": 3, "due": 1798426845, "actual": null}
 {"date": "2026-11-28", "ts": 1795834845, "key": "DVY", "name": "iシェアーズ好配当株式ETF", "bucket": "category", "horizon": 21, "price": 162.07, "pred": 0.005188758649583583, "prob": 0.5361742349651452, "rank": 2, "due": 1798426845, "actual": null}
+{"date": "2026-11-28", "ts": 1795865329, "key": "ROKU", "name": "ロク", "bucket": "top5", "horizon": 21, "price": 160.52, "pred": 0.006593384734275812, "prob": 0.5525054820108828, "rank": 1, "due": 1798457329, "actual": null}
+{"date": "2026-11-28", "ts": 1795865329, "key": "ROKU", "name": "ロク", "bucket": "category", "horizon": 21, "price": 160.52, "pred": 0.006593384734275812, "prob": 0.5525054820108828, "rank": 1, "due": 1798457329, "actual": null}
